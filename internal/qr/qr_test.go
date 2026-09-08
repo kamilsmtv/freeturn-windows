@@ -4,10 +4,13 @@ import (
 	"bytes"
 	"encoding/base64"
 	"errors"
+	"fmt"
 	"image/png"
 	"strconv"
 	"strings"
 	"testing"
+
+	qrcode "github.com/skip2/go-qrcode"
 )
 
 func TestPNG(t *testing.T) {
@@ -125,4 +128,77 @@ func TestDataURIIsSVG(t *testing.T) {
 	if !strings.HasPrefix(string(raw), "<svg ") {
 		t.Error("в data URI не SVG")
 	}
+}
+
+// Вектор и растр обязаны совпадать модуль в модуль: перепутанные оси дают
+// зеркальный код, который на глаз почти не отличить, а камера не читает.
+func TestSVGMatchesPNG(t *testing.T) {
+	const text = "freeturn://eyJ2IjoxLCJuYW1lIjoi0YHQtdGA0LLQtdGAIn0"
+
+	svg, side, err := build(text)
+	if err != nil {
+		t.Fatalf("не удалось нарисовать код: %v", err)
+	}
+
+	// Растр в один пиксель на модуль - прямой слепок матрицы.
+	raw, err := qrcodeEncodeOnePixel(text)
+	if err != nil {
+		t.Fatalf("не удалось нарисовать растр: %v", err)
+	}
+	img, err := png.Decode(bytes.NewReader(raw))
+	if err != nil {
+		t.Fatalf("получен не PNG: %v", err)
+	}
+	if got := img.Bounds().Dx(); got != side {
+		t.Fatalf("сторона растра %d, вектора %d", got, side)
+	}
+
+	dark := parsePath(t, svg, side)
+	for y := 0; y < side; y++ {
+		for x := 0; x < side; x++ {
+			r, g, b, _ := img.At(img.Bounds().Min.X+x, img.Bounds().Min.Y+y).RGBA()
+			black := r == 0 && g == 0 && b == 0
+			if black != dark[y][x] {
+				t.Fatalf("модуль (%d,%d): растр %v, вектор %v", x, y, black, dark[y][x])
+			}
+		}
+	}
+}
+
+// parsePath собирает матрицу обратно из пути SVG: M<x> <y>h<run>v1h-<run>z.
+func parsePath(t *testing.T, svg string, side int) [][]bool {
+	t.Helper()
+
+	out := make([][]bool, side)
+	for i := range out {
+		out[i] = make([]bool, side)
+	}
+
+	_, path, ok := strings.Cut(svg, `<path fill="#000" d="`)
+	if !ok {
+		t.Fatal("в разметке нет пути")
+	}
+	path, _, ok = strings.Cut(path, `"`)
+	if !ok {
+		t.Fatal("путь не закрыт")
+	}
+
+	for _, cmd := range strings.Split(path, "z") {
+		if cmd == "" {
+			continue
+		}
+		var x, y, run int
+		if _, err := fmt.Sscanf(cmd, "M%d %dh%dv1h-%d", &x, &y, &run, new(int)); err != nil {
+			t.Fatalf("не разобран участок %q: %v", cmd, err)
+		}
+		for i := 0; i < run; i++ {
+			out[y][x+i] = true
+		}
+	}
+	return out
+}
+
+// qrcodeEncodeOnePixel рисует растр ровно по пикселю на модуль.
+func qrcodeEncodeOnePixel(text string) ([]byte, error) {
+	return qrcode.Encode(text, qrcode.Low, -1)
 }
