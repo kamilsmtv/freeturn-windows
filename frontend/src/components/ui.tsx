@@ -9,20 +9,43 @@ export function Card({ title, children }: { title?: string; children: ReactNode 
   );
 }
 
+/**
+ * Колечко ожидания внутри кнопки: ровно там, где смотрит нажавший.
+ * Цвет берётся у текста кнопки, поэтому годится для любого варианта.
+ */
+export function Spinner({ size = 14 }: { size?: number }) {
+  return (
+    <svg
+      className="animate-spin"
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      aria-hidden="true"
+    >
+      <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="3" opacity="0.25" />
+      <path d="M21 12a9 9 0 0 0-9-9" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
+    </svg>
+  );
+}
+
 export function Button({
   children,
   onClick,
   variant = "default",
   disabled,
+  busy,
 }: {
   children: ReactNode;
   onClick?: () => void;
   variant?: "default" | "primary" | "ghost";
   disabled?: boolean;
+  /** Кнопка ждёт ответа: показываем колечко и не даём нажать повторно. */
+  busy?: boolean;
 }) {
   // Размеры кнопок из макета: высота 36, радиус 8, текст 13.
   const base =
-    "inline-flex h-9 shrink-0 items-center justify-center rounded-lg px-4 text-[13px] font-medium transition disabled:opacity-40 disabled:pointer-events-none";
+    "inline-flex h-9 shrink-0 items-center justify-center gap-2 rounded-lg px-4 text-[13px] font-medium transition disabled:opacity-40 disabled:pointer-events-none";
   const styles = {
     default:
       "border border-zinc-200 bg-white text-zinc-800 hover:bg-zinc-100 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800",
@@ -30,7 +53,8 @@ export function Button({
     ghost: "text-zinc-600 hover:bg-zinc-200 dark:text-zinc-400 dark:hover:bg-zinc-800",
   }[variant];
   return (
-    <button className={`${base} ${styles}`} onClick={onClick} disabled={disabled}>
+    <button className={`${base} ${styles}`} onClick={onClick} disabled={disabled || busy}>
+      {busy && <Spinner />}
       {children}
     </button>
   );

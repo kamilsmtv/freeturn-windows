@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { backend, EVENTS, onEvent, type Profile, type ProbeData, type VPSResult } from "../lib/api";
-import { Button } from "./ui";
+import { Button, Spinner } from "./ui";
 import { Field, NumberInput, Picker, TextArea, TextInput } from "./Field";
 import { useBusyWhile } from "../lib/busy";
 import { guard } from "../lib/effect";
@@ -166,18 +166,30 @@ export function ServerPanel({ profile, onProfile }: { profile: Profile; onProfil
           <h1 className="truncate text-xl font-semibold">Сервер {profile.name}</h1>
           <p className="truncate text-[13px] text-zinc-500 dark:text-zinc-400">{subtitle}</p>
         </div>
-        <HeaderButton disabled={disabled} onClick={() => run("probe", () => api!.VPSProbe(profile.id))}>
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="text-zinc-500 dark:text-zinc-400">
-            <path d="M21 12a9 9 0 1 1-3-6.7" />
-            <path d="M21 4v5h-5" />
-          </svg>
+        <HeaderButton
+          disabled={disabled}
+          busy={busy === "probe"}
+          onClick={() => run("probe", () => api!.VPSProbe(profile.id))}
+          icon={
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="text-zinc-500 dark:text-zinc-400">
+              <path d="M21 12a9 9 0 1 1-3-6.7" />
+              <path d="M21 4v5h-5" />
+            </svg>
+          }
+        >
           {busy === "probe" ? "Опрашиваю…" : "Проверить"}
         </HeaderButton>
-        <HeaderButton disabled={disabled} onClick={() => run("logs", () => api!.VPSLogs(profile.id, 120))}>
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="text-zinc-500 dark:text-zinc-400">
-            <path d="M4 6h16M4 12h16M4 18h10" />
-          </svg>
-          Журнал сервера
+        <HeaderButton
+          disabled={disabled}
+          busy={busy === "logs"}
+          onClick={() => run("logs", () => api!.VPSLogs(profile.id, 120))}
+          icon={
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="text-zinc-500 dark:text-zinc-400">
+              <path d="M4 6h16M4 12h16M4 18h10" />
+            </svg>
+          }
+        >
+          {busy === "logs" ? "Читаю журнал…" : "Журнал сервера"}
         </HeaderButton>
       </header>
 
@@ -303,6 +315,7 @@ export function ServerPanel({ profile, onProfile }: { profile: Profile; onProfil
                 variant="primary"
                 disabled={disabled}
                 onClick={() => run("install", () => api!.VPSInstall(profile.id, true))}
+                busy={busy === "install"}
               >
                 {busy === "install" ? "Устанавливаю…" : probe?.installed ? "Переустановить" : "Установить ядро"}
               </Button>
@@ -319,10 +332,18 @@ export function ServerPanel({ profile, onProfile }: { profile: Profile; onProfil
             }
           >
             <div className="flex flex-wrap gap-2 pt-1">
-              <Button disabled={disabled} onClick={() => run("share", () => api!.VPSImportShareInfo(profile.id))}>
+              <Button
+                disabled={disabled}
+                busy={busy === "share"}
+                onClick={() => run("share", () => api!.VPSImportShareInfo(profile.id))}
+              >
                 {busy === "share" ? "Спрашиваю сервер…" : "Забрать параметры подключения"}
               </Button>
-              <Button disabled={disabled} onClick={() => run("wg", () => api!.VPSSetupWireGuard(profile.id))}>
+              <Button
+                disabled={disabled}
+                busy={busy === "wg"}
+                onClick={() => run("wg", () => api!.VPSSetupWireGuard(profile.id))}
+              >
                 {busy === "wg" ? "Настраиваю…" : "Настроить WireGuard и забрать конфиг"}
               </Button>
             </div>
@@ -339,12 +360,16 @@ export function ServerPanel({ profile, onProfile }: { profile: Profile; onProfil
                 <Button
                   variant="primary"
                   disabled={disabled || !peerName.trim()}
+                  busy={busy === "peer"}
                   onClick={async () => {
                     setError("");
+                    setBusy("peer");
                     try {
                       setShare(await api!.VPSAddPeer(profile.id, peerName.trim()));
                     } catch (e) {
                       setError(String(e));
+                    } finally {
+                      setBusy("");
                     }
                   }}
                 >
@@ -392,10 +417,18 @@ export function ServerPanel({ profile, onProfile }: { profile: Profile; onProfil
               </span>
             </div>
             <div className="flex items-center gap-2.5 pt-1">
-              <Button disabled={disabled} onClick={() => run("start", () => api!.VPSStart(profile.id))}>
+              <Button
+                disabled={disabled}
+                busy={busy === "start"}
+                onClick={() => run("start", () => api!.VPSStart(profile.id))}
+              >
                 {busy === "start" ? "Запускаю…" : probe?.running ? "Перезапустить" : "Запустить"}
               </Button>
-              <Button disabled={disabled} onClick={() => run("stop", () => api!.VPSStop(profile.id))}>
+              <Button
+                disabled={disabled}
+                busy={busy === "stop"}
+                onClick={() => run("stop", () => api!.VPSStop(profile.id))}
+              >
                 {busy === "stop" ? "Останавливаю…" : "Остановить"}
               </Button>
             </div>
@@ -549,20 +582,26 @@ function Notice({ tone, children }: { tone: "ok" | "warn" | "error"; children: R
 
 /** Кнопка в шапке экрана: 36px, иконка слева — как в макете. */
 function HeaderButton({
+  icon,
   children,
   onClick,
   disabled,
+  busy,
 }: {
+  icon: ReactNode;
   children: ReactNode;
   onClick: () => void;
   disabled?: boolean;
+  busy?: boolean;
 }) {
   return (
     <button
       onClick={onClick}
-      disabled={disabled}
+      disabled={disabled || busy}
       className="flex h-9 shrink-0 items-center gap-2 rounded-lg border border-zinc-200 bg-white px-4 text-[13px] transition hover:bg-zinc-100 disabled:pointer-events-none disabled:opacity-40 dark:border-zinc-800 dark:bg-zinc-900 dark:hover:bg-zinc-800"
     >
+      {/* Пока идёт команда, значок уступает место колечку - кнопка не прыгает. */}
+      {busy ? <Spinner /> : icon}
       {children}
     </button>
   );

@@ -48,12 +48,13 @@ export function SettingsScreen({
   const [password, setPassword] = useState("");
   const [note, setNote] = useState("");
   const [error, setError] = useState("");
-  const [busy, setBusy] = useState(false);
+  // Имя действия вместо флага: колечко крутится в нажатой кнопке.
+  const [busy, setBusy] = useState("");
   const api = backend();
   const subs = settings.subscriptions ?? [];
 
-  const run = async (fn: () => Promise<string>) => {
-    setBusy(true);
+  const run = async (name: string, fn: () => Promise<string>) => {
+    setBusy(name);
     setNote("");
     setError("");
     try {
@@ -61,7 +62,7 @@ export function SettingsScreen({
     } catch (e) {
       setError(String(e));
     } finally {
-      setBusy(false);
+      setBusy("");
     }
   };
 
@@ -159,9 +160,10 @@ export function SettingsScreen({
               <div className="flex gap-2 px-5 py-2">
                 <TextInput value={subUrl} onChange={setSubUrl} placeholder="https://example.com/sub.md" />
                 <Button
-                  disabled={busy || !subUrl.trim()}
+                  disabled={busy !== "" || !subUrl.trim()}
+                  busy={busy === "sub-add"}
                   onClick={() =>
-                    run(async () => {
+                    run("sub-add", async () => {
                       const p = await api!.ApplySubscription(subUrl.trim());
                       setSubUrl("");
                       const skipped = p.skipped ? `, пропущено ссылок: ${p.skipped}` : "";
@@ -180,9 +182,10 @@ export function SettingsScreen({
                 <SettingRow key={url} title={url}>
                   <div className="flex gap-2">
                     <Button
-                      disabled={busy}
+                      disabled={busy !== ""}
+                      busy={busy === "sub-refresh:" + url}
                       onClick={() =>
-                        run(async () => {
+                        run("sub-refresh:" + url, async () => {
                           const p = await api!.ApplySubscription(url);
                           return `Обновлено серверов: ${p.profiles.length}`;
                         })
@@ -192,9 +195,10 @@ export function SettingsScreen({
                     </Button>
                     <Button
                       variant="ghost"
-                      disabled={busy}
+                      disabled={busy !== ""}
+                      busy={busy === "sub-remove:" + url}
                       onClick={() =>
-                        run(async () => {
+                        run("sub-remove:" + url, async () => {
                           await api!.RemoveSubscription(url);
                           patch({ subscriptions: subs.filter((u) => u !== url) });
                           return "Подписка удалена; её профили остались в списке";
@@ -226,9 +230,10 @@ export function SettingsScreen({
               <div className="flex items-center gap-2 px-5 py-3">
                 <TextInput type="password" value={password} onChange={setPassword} placeholder="Пароль бэкапа" />
                 <Button
-                  disabled={busy || !password}
+                  disabled={busy !== "" || !password}
+                  busy={busy === "backup-save"}
                   onClick={() =>
-                    run(async () => {
+                    run("backup-save", async () => {
                       const path = await api!.ExportBackup(password);
                       return path ? `Сохранено: ${path}` : "Сохранение отменено";
                     })
@@ -237,9 +242,10 @@ export function SettingsScreen({
                   Экспорт
                 </Button>
                 <Button
-                  disabled={busy || !password}
+                  disabled={busy !== "" || !password}
+                  busy={busy === "backup-load"}
                   onClick={() =>
-                    run(async () => {
+                    run("backup-load", async () => {
                       const n = await api!.ImportBackup(password);
                       return n > 0 ? `Восстановлено профилей: ${n}` : "Восстановление отменено";
                     })

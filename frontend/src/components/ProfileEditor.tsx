@@ -186,6 +186,7 @@ export function ProfileEditor({
                 <span className="flex-1 text-[13px]">Конфигурация WireGuard есть — туннель поднимет приложение</span>
                 <Button
                   disabled={busy}
+                  busy={busy}
                   onClick={async () => {
                     setWgError("");
                     setWgPreview("");
@@ -212,6 +213,7 @@ export function ProfileEditor({
                 <Button
                   variant="primary"
                   disabled={busy}
+                  busy={busy}
                   onClick={async () => {
                     setWgError("");
                     setBusy(true);
@@ -226,7 +228,7 @@ export function ProfileEditor({
                     }
                   }}
                 >
-                  {busy ? "Запрашиваю…" : "Запросить у сервера"}
+                  Запросить у сервера
                 </Button>
               </div>
             )}
@@ -445,6 +447,7 @@ export function ProfileEditor({
               <Button
                 variant={profile.client.wireGuardConfig.trim() ? "default" : "primary"}
                 disabled={busy}
+                busy={busy}
                 onClick={async () => {
                   setWgError("");
                   setWgPreview("");
@@ -472,7 +475,7 @@ export function ProfileEditor({
                   }
                 }}
               >
-                {busy ? "Запрашиваю…" : "Запросить у сервера"}
+                Запросить у сервера
               </Button>
               <Button
                 disabled={busy}

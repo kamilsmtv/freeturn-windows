@@ -23,6 +23,7 @@ export function QRCode({ text, name }: { text: string; name: string }) {
   const [note, setNote] = useState("");
   const [saved, setSaved] = useState("");
   const [error, setError] = useState("");
+  const [saving, setSaving] = useState(false);
   const api = backend();
 
   useEffect(() => guard("QRCode/render", () => {
@@ -70,14 +71,18 @@ export function QRCode({ text, name }: { text: string; name: string }) {
         <img src={img.uri} alt="QR-код ссылки" width={side} height={side} />
       </div>
       <Button
+        busy={saving}
         onClick={async () => {
           setSaved("");
           setError("");
+          setSaving(true);
           try {
             const path = await api?.SaveQRCode(text, name);
             if (path) setSaved(path);
           } catch (e) {
             setError(String(e));
+          } finally {
+            setSaving(false);
           }
         }}
       >

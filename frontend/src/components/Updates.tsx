@@ -26,7 +26,9 @@ export function Updates() {
   const [status, setStatus] = useState<UpdateStatus | null>(null);
   const [progress, setProgress] = useState<UpdateProgress | null>(null);
   const [gui, setGui] = useState<GUIStatus | null>(null);
-  const [busy, setBusy] = useState(false);
+  // Занятость помечаем именем действия: колечко должно крутиться ровно
+  // в той кнопке, которую нажали.
+  const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
 
   useEffect(() => guard("Updates/subscribe", () => {
@@ -39,15 +41,15 @@ export function Updates() {
     return () => off.forEach((f) => f());
   }), []);
 
-  const run = async (fn: () => Promise<UpdateStatus>) => {
-    setBusy(true);
+  const run = async (name: string, fn: () => Promise<UpdateStatus>) => {
+    setBusy(name);
     setError("");
     try {
       setStatus(await fn());
     } catch (e) {
       setError(String(e));
     } finally {
-      setBusy(false);
+      setBusy("");
       setProgress(null);
     }
   };
@@ -55,7 +57,7 @@ export function Updates() {
   const api = backend();
 
   // Скачивание и проверка версий идут заметное время - показываем полоской.
-  useBusyWhile("update", busy, "Обновление ядра");
+  useBusyWhile("update", busy !== "", "Обновление ядра");
 
   return (
     <div className="flex flex-col gap-4">
@@ -68,19 +70,25 @@ export function Updates() {
         </Row>
         <Row label="Действия">
           <div className="flex gap-2">
-            <Button onClick={() => run(() => api!.CheckCoreUpdate())} disabled={busy || !api}>
+            <Button
+              onClick={() => run("check", () => api!.CheckCoreUpdate())}
+              disabled={busy !== "" || !api}
+              busy={busy === "check"}
+            >
               Проверить
             </Button>
             <Button
               variant="primary"
-              onClick={() => run(() => api!.InstallCore())}
-              disabled={busy || !api || (status?.installed === true && !status?.updateReady)}
+              onClick={() => run("install", () => api!.InstallCore())}
+              disabled={busy !== "" || !api || (status?.installed === true && !status?.updateReady)}
+              busy={busy === "install"}
             >
               {status?.installed ? "Обновить" : "Скачать ядро"}
             </Button>
             <Button
-              onClick={() => run(() => api!.RollbackCore())}
-              disabled={busy || !api || !status?.canRollback}
+              onClick={() => run("rollback", () => api!.RollbackCore())}
+              disabled={busy !== "" || !api || !status?.canRollback}
+              busy={busy === "rollback"}
             >
               Откатить{status?.rollbackTarget ? ` на ${status.rollbackTarget}` : ""}
             </Button>
@@ -134,14 +142,15 @@ export function Updates() {
             <span className="font-mono text-sm">{gui?.current || "—"}</span>
             <Button
               onClick={async () => {
-                setBusy(true);
+                setBusy("gui");
                 try {
                   setGui((await api?.CheckGUIUpdate()) ?? null);
                 } finally {
-                  setBusy(false);
+                  setBusy("");
                 }
               }}
-              disabled={busy || !api}
+              disabled={busy !== "" || !api}
+              busy={busy === "gui"}
             >
               Проверить
             </Button>

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { backend, EVENTS, onEvent, type LogLine } from "../lib/api";
 import { guard } from "../lib/effect";
+import { Spinner } from "./ui";
 
 const LEVELS = [
   { value: "all", label: "Все" },
@@ -22,6 +23,7 @@ export function LogView() {
   const [query, setQuery] = useState("");
   const [follow, setFollow] = useState(true);
   const [saved, setSaved] = useState("");
+  const [saving, setSaving] = useState(false);
   const logBox = useRef<HTMLDivElement>(null);
 
   useEffect(() => guard("LogView/subscribe", () => {
@@ -84,12 +86,16 @@ export function LogView() {
         </Chip>
         <Chip onClick={() => navigator.clipboard.writeText(asText())}>Копировать</Chip>
         <Chip
+          busy={saving}
           onClick={async () => {
+            setSaving(true);
             try {
               const path = await backend()?.ExportLog();
               if (path) setSaved(path);
             } catch (e) {
               setSaved(String(e));
+            } finally {
+              setSaving(false);
             }
           }}
         >
@@ -140,20 +146,24 @@ function Chip({
   children,
   onClick,
   active,
+  busy,
 }: {
   children: ReactNode;
   onClick: () => void;
   active?: boolean;
+  busy?: boolean;
 }) {
   return (
     <button
       onClick={onClick}
-      className={`flex h-8 shrink-0 items-center rounded-lg border px-3.5 text-[13px] transition ${
+      disabled={busy}
+      className={`flex h-8 shrink-0 items-center gap-2 rounded-lg border px-3.5 text-[13px] transition disabled:opacity-40 ${
         active
           ? "border-emerald-500 bg-emerald-50 text-emerald-700 dark:bg-[#0f1a15] dark:text-emerald-300"
           : "border-zinc-200 bg-white text-zinc-700 hover:bg-zinc-100 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-300 dark:hover:bg-zinc-800"
       }`}
     >
+      {busy && <Spinner size={13} />}
       {children}
     </button>
   );

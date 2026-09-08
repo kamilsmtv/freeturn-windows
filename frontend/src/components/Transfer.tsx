@@ -61,6 +61,7 @@ export function ShareDialog({ profile, onClose }: { profile: Profile; onClose: (
   const [url, setUrl] = useState("");
   const [saved, setSaved] = useState("");
   const [error, setError] = useState("");
+  const [saving, setSaving] = useState(false);
   const api = backend();
 
   // Ссылку пересобираем на каждое изменение переключателей: иначе на экране
@@ -111,13 +112,17 @@ export function ShareDialog({ profile, onClose }: { profile: Profile; onClose: (
 
         <div className="flex items-center gap-2">
           <Button
+            busy={saving}
             onClick={async () => {
               setError("");
+              setSaving(true);
               try {
                 const path = await api?.ExportLinkToFile(profile.id, includeVK, clientId);
                 if (path) setSaved(path);
               } catch (e) {
                 setError(String(e));
+              } finally {
+                setSaving(false);
               }
             }}
           >
