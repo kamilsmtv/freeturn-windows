@@ -42,7 +42,13 @@ jobs:
         working-directory: frontend
         run: |
           npm ci
+          npm test
           npm run build
+
+      - name: Тесты Go
+        # Релиз не должен уезжать со сломанной логикой: то же, что и в CI,
+        # только здесь это последняя преграда перед публикацией.
+        run: go test ./...
 
       - name: Ресурсы Windows (иконка, манифест, версия)
         shell: bash

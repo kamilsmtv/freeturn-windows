@@ -13,6 +13,7 @@ ACCENT = (0x10, 0xB9, 0x81, 255)    # emerald-500
 MUTED = (0x52, 0x52, 0x5B, 255)     # zinc-600, «отключено» на светлой панели
 MUTED_LIGHT = (0xD4, 0xD4, 0xD8, 255)  # zinc-300, «отключено» на тёмной панели
 DANGER = (0xF8, 0x71, 0x71, 255)    # red-400, состояние «ошибка»
+BUSY = (0xF5, 0x9E, 0x0B, 255)      # amber-500, переход: связи ещё нет
 
 SS = 8  # сглаживание сверхдискретизацией
 
@@ -100,6 +101,7 @@ if __name__ == "__main__":
         ("tray", ACCENT),
         ("tray-off", MUTED),
         ("tray-off-light", MUTED_LIGHT),
+        ("tray-busy", BUSY),
         ("tray-error", DANGER),
     ):
         write_ico(
@@ -110,4 +112,4 @@ if __name__ == "__main__":
             draw_icon(s, accent=color, tile=None, glyph_ratio=0.92).save(f"{outdir}/{name}-{s}.png")
 
     print("готово:", ", ".join(f"icon-{s}.png" for s in sizes),
-          "+ icon.ico, tray.ico, tray-off.ico, tray-off-light.ico, tray-error.ico")
+          "+ icon.ico, tray.ico, tray-off.ico, tray-off-light.ico, tray-busy.ico, tray-error.ico")

@@ -71,6 +71,10 @@
 - **[amneziawg-go](https://github.com/amnezia-vpn/amneziawg-go)** — реализация WireGuard/AmneziaWG для встроенного туннеля
 - **[Wintun](https://www.wintun.net/)** — драйвер виртуального адаптера от WireGuard LLC
 
+## История изменений
+
+[CHANGELOG.md](CHANGELOG.md)
+
 ## Лицензия
 
 [GPL-3.0](LICENSE)

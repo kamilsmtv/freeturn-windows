@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import type { CoreStatus } from "../lib/api";
+import type { Phase } from "../lib/phase";
 import { Logo } from "./Logo";
 
 export type Screen = "home" | "server" | "logs" | "updates" | "settings" | "about";
@@ -77,15 +77,16 @@ const ITEMS: { id: Screen; label: string }[] = [
 export function Rail({
   screen,
   onScreen,
-  core,
+  phase,
   children,
 }: {
   screen: Screen;
   onScreen: (s: Screen) => void;
-  core: CoreStatus | null;
+  phase: Phase;
   children?: ReactNode;
 }) {
-  const tone = core?.state === "failed" ? "failed" : core?.state === "running" ? "live" : "idle";
+  // Тот же язык, что и на главной: зелёный - связь есть, красный - сорвалась.
+  const tone = phase.tone === "error" ? "failed" : phase.live ? "live" : "idle";
 
   return (
     <nav className="flex w-[88px] shrink-0 flex-col items-center gap-1 border-r border-zinc-200 bg-zinc-100 py-4 dark:border-zinc-800 dark:bg-[#0c0c0e]">

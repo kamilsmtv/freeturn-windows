@@ -20,6 +20,18 @@ export function isVPN(p: Profile | null): boolean {
 }
 
 /**
+ * runningProfile - профиль, с которым запущено ядро.
+ *
+ * Активный профиль можно переключить, не отключаясь, и тогда режим у него
+ * будет уже другой: судить о фазе надо по тому, что реально работает.
+ */
+export function runningProfile(core: CoreStatus | null, list: Profile[], active: Profile | null): Profile | null {
+  const id = core?.profileId ?? "";
+  if (id === "") return active;
+  return list.find((p) => p.id === id) ?? active;
+}
+
+/**
  * Фаза подключения одним значением.
  *
  * Состояния ядра недостаточно: в режиме VPN запущенное ядро - это ещё не

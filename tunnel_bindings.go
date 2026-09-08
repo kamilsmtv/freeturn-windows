@@ -207,7 +207,7 @@ func (a *App) raiseTunnelWhenReady(gen int64, p profile.Profile) {
 	}
 	a.tunnelErr.Store("ядро не установило канал через TURN за 90 секунд - туннель не поднят")
 	a.core.AppendLog("error", a.tunnelErr.Load())
-	a.emit(EventTunnel, a.TunnelStatus())
+	a.emitTunnel()
 }
 
 // raiseTunnel готовит маршруты-исключения и поднимает туннель.
@@ -228,7 +228,7 @@ func (a *App) raiseTunnel(gen int64, p profile.Profile) {
 		a.core.AppendLog("error", "Туннель не поднят: "+err.Error())
 		a.routes.Release()
 	}
-	a.emit(EventTunnel, a.TunnelStatus())
+	a.emitTunnel()
 }
 
 // withPhysicalDNS задаёт ядру DNS физической сети.
@@ -272,7 +272,16 @@ func (a *App) stopTunnel() {
 	a.tunnel.Down()
 	a.routes.Release()
 	a.tunnelErr.Store("")
+	a.emitTunnel()
+}
+
+// emitTunnel рассылает состояние туннеля и подтягивает значок в трее.
+//
+// Значок должен говорить то же, что и окно: в режиме VPN связь появляется
+// не с запуском ядра, а с подъёмом туннеля.
+func (a *App) emitTunnel() {
 	a.emit(EventTunnel, a.TunnelStatus())
+	a.updateTray(a.core.Status())
 }
 
 // EnsureWintun докачивает библиотеку адаптера по запросу из настроек.

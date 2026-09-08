@@ -45,12 +45,71 @@ func (a *App) updateTray(st core.Status) {
 	} else if active, ok := a.profiles.All().Active(); ok {
 		name = active.Name
 	}
+	tun := a.TunnelStatus()
+	live := connected(st.State, tun)
 	a.tray.SetState(tray.State{
-		Connected: st.State == core.StateRunning,
-		Failed:    st.State == core.StateFailed,
-		Profile:   name,
-		Detail:    st.Error,
+		Connected: live,
+		// Ядро живо, но связи ещё нет: запуск, остановка или подъём туннеля.
+		Busy:    !live && st.State != core.StateStopped && st.State != core.StateFailed,
+		Failed:  st.State == core.StateFailed,
+		Title:   trayTitle(st, tun),
+		Profile: name,
+		Detail:  trayDetail(st, tun),
 	})
+}
+
+// trayTitle - подпись состояния в меню значка. Слова те же, что и в окне:
+// человек не должен догадываться, что «Подключение…» в трее и «Поднимаю
+// туннель…» в окне - это одно и то же.
+func trayTitle(st core.Status, t TunnelStatus) string {
+	switch {
+	case st.State == core.StateFailed:
+		return "Ошибка"
+	case st.State == core.StateStopping:
+		return "Отключение…"
+	case st.State == core.StateStarting:
+		return "Запуск ядра…"
+	case st.State != core.StateRunning:
+		return "Отключено"
+	case connected(st.State, t):
+		return "Подключено"
+	case t.Error != "":
+		return "Туннель не поднялся"
+	default:
+		return "Поднимаю туннель…"
+	}
+}
+
+// connected сообщает, есть ли связь на самом деле.
+//
+// В режиме VPN запущенное ядро - это ещё не подключение: трафик пойдёт
+// только после того, как поднимется туннель. Значок в трее не должен
+// зеленеть раньше времени.
+func connected(state core.State, t TunnelStatus) bool {
+	if state != core.StateRunning {
+		return false
+	}
+	if !t.Enabled {
+		// Режим прокси: ядро слушает порт, больше ничего не нужно.
+		return true
+	}
+	return t.Up
+}
+
+// trayDetail - строка под названием профиля в меню значка.
+func trayDetail(st core.Status, t TunnelStatus) string {
+	switch {
+	case st.Error != "":
+		return st.Error
+	case st.State != core.StateRunning || !t.Enabled:
+		return ""
+	case t.Error != "":
+		return t.Error
+	case !t.Up:
+		return "поднимаю туннель"
+	default:
+		return "туннель поднят"
+	}
 }
 
 // ShowWindow возвращает окно на экран из трея.

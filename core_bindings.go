@@ -58,7 +58,7 @@ func (a *App) CoreStart(p profile.Profile) error {
 		a.tunnelErr.Store("в профиле выбран режим VPN, но нет конфигурации WireGuard - " +
 			"запросите её у сервера; пока работает только режим прокси")
 		a.core.AppendLog("warn", a.tunnelErr.Load())
-		a.emit(EventTunnel, a.TunnelStatus())
+		a.emitTunnel()
 	}
 	s := a.settings.Get()
 	if s.LastProfileID != p.ID {

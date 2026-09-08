@@ -14,6 +14,9 @@ func TestIconForState(t *testing.T) {
 		want  string
 	}{
 		{"подключено", State{Connected: true}, false, "tray.ico"},
+		{"переход", State{Busy: true}, false, "tray-busy.ico"},
+		{"переход на тёмной панели", State{Busy: true}, true, "tray-busy.ico"},
+		{"подключено важнее перехода", State{Connected: true, Busy: true}, false, "tray.ico"},
 		{"отключено на светлой панели", State{}, false, "tray-off.ico"},
 		{"отключено на тёмной панели", State{}, true, "tray-off-light.ico"},
 		{"ошибка", State{Failed: true}, false, "tray-error.ico"},

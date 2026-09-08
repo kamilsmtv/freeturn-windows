@@ -24,6 +24,11 @@ var iconIdleLight []byte
 //go:embed tray-error.ico
 var iconFailed []byte
 
+// Переходное состояние: янтарный читается на панели любой темы.
+//
+//go:embed tray-busy.ico
+var iconBusy []byte
+
 // Значок реализован напрямую через Shell_NotifyIcon, а не библиотекой:
 // готовые обёртки открывают меню по любой кнопке мыши, а нам нужно левой
 // показывать окно и только правой - меню. Заодно мы полностью управляем
@@ -39,6 +44,8 @@ func iconForState(s State, lightGlyph bool) []byte {
 		return iconFailed
 	case s.Connected:
 		return iconConnected
+	case s.Busy:
+		return iconBusy
 	case lightGlyph:
 		return iconIdleLight
 	default:

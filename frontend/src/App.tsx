@@ -10,8 +10,10 @@ import {
   type Profile,
   type Settings,
   type Snapshot,
+  type TunnelStatus,
 } from "./lib/api";
 import { useBusyLabel, useBusyWhile } from "./lib/busy";
+import { connectionPhase, runningProfile } from "./lib/phase";
 import { guard } from "./lib/effect";
 import { applyTheme } from "./lib/theme";
 import { Card, EmptyState } from "./components/ui";
@@ -33,6 +35,8 @@ export default function App() {
   const [settings, setSettings] = useState<Settings | null>(null);
   const [core, setCore] = useState<CoreStatus | null>(null);
   const [draft, setDraft] = useState<Profile | null>(null);
+  const [snap, setSnap] = useState<Snapshot>({ list: [], activeId: "" });
+  const [tunnel, setTunnel] = useState<TunnelStatus | null>(null);
 
   useEffect(() => guard("App/init", () => {
     const api = backend();
@@ -50,10 +54,32 @@ export default function App() {
 
   useEffect(() => applyTheme(settings?.theme ?? "system"), [settings?.theme]);
 
-  // Переходы ядра видны из любого раздела: полоска показывает их и на
-  // экране сервера, и в настройках.
-  const transition = core?.state === "starting" || core?.state === "stopping";
-  useBusyWhile("core", transition, core?.state === "stopping" ? "Отключение" : "Запуск ядра");
+  // Профили и туннель нужны не только главному экрану: по ним считается
+  // фаза подключения, а её показывает полоска в любом разделе.
+  useEffect(() => guard("App/profiles", () => {
+    const put = (s: Snapshot) => setSnap({ list: s?.list ?? [], activeId: s?.activeId ?? "" });
+    backend()?.Profiles().then(put);
+    return onEvent<Snapshot>(EVENTS.profiles, put);
+  }), []);
+
+  useEffect(() => guard("App/tunnel", () => {
+    backend()?.TunnelStatus().then(setTunnel);
+    return onEvent<TunnelStatus>(EVENTS.tunnel, setTunnel);
+  }), []);
+
+  const active = snap.list.find((p) => p.id === snap.activeId) ?? null;
+  const phase = connectionPhase(core, tunnel, runningProfile(core, snap.list, active));
+
+  // Пока туннель поднимается, состояние меняется без события: спрашиваем сами.
+  useEffect(() => guard("App/tunnelPoll", () => {
+    if (!phase.busy) return;
+    const id = setInterval(() => backend()?.TunnelStatus().then(setTunnel), 1500);
+    return () => clearInterval(id);
+  }), [phase.busy]);
+
+  // Переход виден из любого раздела: полоска показывает его и на экране
+  // сервера, и в настройках.
+  useBusyWhile("connection", phase.busy, phase.text);
   const busyLabel = useBusyLabel();
 
   const patch = (p: Partial<Settings>) => {
@@ -77,8 +103,8 @@ export default function App() {
     />
   ) : (
     {
-      home: <Home core={core} onEditProfile={setDraft} />,
-      server: <ServerTab />,
+      home: <Home core={core} snap={snap} phase={phase} onEditProfile={setDraft} />,
+      server: <ServerTab active={active} />,
       logs: (
         <div className="h-full px-8 py-6">
           <LogView />
@@ -92,13 +118,13 @@ export default function App() {
       settings: settings ? (
         <SettingsScreen settings={settings} patch={patch} onSettings={setSettings} />
       ) : null,
-      about: <About info={info} core={core} />,
+      about: <About info={info} phase={phase} coreVersion={core?.version ?? ""} />,
     }[screen]
   );
 
   return (
     <div className="flex h-screen bg-zinc-100 text-zinc-900 dark:bg-zinc-950 dark:text-zinc-100">
-      <Rail screen={screen} onScreen={(s) => { setDraft(null); setScreen(s); }} core={core} />
+      <Rail screen={screen} onScreen={(s) => { setDraft(null); setScreen(s); }} phase={phase} />
 
       <main className="flex min-w-0 flex-1 flex-col overflow-hidden">
         <TopProgress active={busyLabel !== ""} label={busyLabel} />
@@ -114,16 +140,7 @@ export default function App() {
 }
 
 /** Вкладка сервера работает с активным профилем. */
-function ServerTab() {
-  const [snap, setSnap] = useState<Snapshot>({ list: [], activeId: "" });
-
-  useEffect(() => guard("ServerTab/profiles", () => {
-    const put = (s: Snapshot) => setSnap({ list: s?.list ?? [], activeId: s?.activeId ?? "" });
-    backend()?.Profiles().then(put);
-    return onEvent<Snapshot>(EVENTS.profiles, put);
-  }), []);
-
-  const active = snap.list.find((p) => p.id === snap.activeId) ?? null;
+function ServerTab({ active }: { active: Profile | null }) {
   if (!active) {
     return (
       <div className="px-8 py-6">

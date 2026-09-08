@@ -1,17 +1,13 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import {
   backend,
-  EVENTS,
-  onEvent,
   type CoreStatus,
   type Profile,
   type Snapshot,
   type Traffic,
-  type TunnelStatus,
 } from "../lib/api";
-import { useBusyWhile } from "../lib/busy";
 import { guard } from "../lib/effect";
-import { connectionPhase, isVPN } from "../lib/phase";
+import { isVPN, runningProfile, type Phase } from "../lib/phase";
 import { bytes, uptime } from "../lib/format";
 import { ImportDialog, ShareDialog } from "./Transfer";
 
@@ -23,10 +19,18 @@ const SEARCH_FROM = 6;
  * профилей. Устроен как в Android-клиенте: список всегда на виду и
  * разворачивается на весь экран, когда профилей много.
  */
-export function Home({ core, onEditProfile }: { core: CoreStatus | null; onEditProfile: (p: Profile) => void }) {
-  const [snap, setSnap] = useState<Snapshot>({ list: [], activeId: "" });
+export function Home({
+  core,
+  snap,
+  phase,
+  onEditProfile,
+}: {
+  core: CoreStatus | null;
+  snap: Snapshot;
+  phase: Phase;
+  onEditProfile: (p: Profile) => void;
+}) {
   const [traffic, setTraffic] = useState<Traffic | null>(null);
-  const [tunnel, setTunnel] = useState<TunnelStatus | null>(null);
   const [query, setQuery] = useState("");
   const [expanded, setExpanded] = useState(false);
   const [importing, setImporting] = useState(false);
@@ -38,19 +42,6 @@ export function Home({ core, onEditProfile }: { core: CoreStatus | null; onEditP
   const api = backend();
   const running = core?.state === "running" || core?.state === "starting";
 
-  useEffect(() => guard("Home/profiles", () => {
-    const put = (s: Snapshot) => setSnap({ list: s?.list ?? [], activeId: s?.activeId ?? "" });
-    api?.Profiles().then(put);
-    return onEvent<Snapshot>(EVENTS.profiles, put);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }), []);
-
-  useEffect(() => guard("Home/tunnel", () => {
-    api?.TunnelStatus().then(setTunnel);
-    return onEvent<TunnelStatus>(EVENTS.tunnel, setTunnel);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }), []);
-
   useEffect(() => guard("Home/traffic", () => {
     if (!running) {
       setTraffic(null);
@@ -58,7 +49,6 @@ export function Home({ core, onEditProfile }: { core: CoreStatus | null; onEditP
     }
     const read = () => {
       api?.TrafficStats().then(setTraffic);
-      api?.TunnelStatus().then(setTunnel);
       tick((v) => v + 1);
     };
     read();
@@ -77,23 +67,29 @@ export function Home({ core, onEditProfile }: { core: CoreStatus | null; onEditP
   };
 
   const active = snap.list.find((p) => p.id === snap.activeId) ?? null;
+  // Активный профиль можно переключить, не отключаясь: подпись под кнопкой
+  // должна называть тот, с которым ядро работает сейчас.
+  const shown = runningProfile(core, snap.list, active);
 
   // Активный профиль всегда первым: до него не должно быть прокрутки.
-  const shown = useMemo(() => {
+  const visible = useMemo(() => {
     const q = query.trim().toLowerCase();
     return snap.list
       .filter((p) => !q || p.name.toLowerCase().includes(q) || p.client.serverAddress.toLowerCase().includes(q))
       .sort((a, b) => (a.id === snap.activeId ? -1 : b.id === snap.activeId ? 1 : 0));
   }, [snap, query]);
 
-  const toggleConnection = () =>
-    running ? run(() => api!.CoreStop()) : active ? run(() => api!.CoreStart(active)) : undefined;
+  // Во время остановки кнопка ничего не делает: запустить ядро заново,
+  // пока прежнее ещё снимает маршруты, - верный способ получить два ядра.
+  const switching = core?.state === "stopping";
+  const toggleConnection = () => {
+    if (switching) return;
+    if (running) return run(() => api!.CoreStop());
+    if (active) return run(() => api!.CoreStart(active));
+  };
 
   const heroLabel = running ? "Отключить" : "Подключить";
-  const phase = connectionPhase(core, tunnel, active);
   const statusText = phase.text;
-  // Полоска вверху окна: пока идёт переход, видно, что приложение занято.
-  useBusyWhile("connection", phase.busy, phase.text);
   // Ошибку фазы показывает подпись под кнопкой - здесь только то, что
   // относится к самому окну (не удалось запустить, не сохранился профиль).
   const problem = error || (phase.tone === "error" ? phase.hint : "");
@@ -123,7 +119,7 @@ export function Home({ core, onEditProfile }: { core: CoreStatus | null; onEditP
           <span className="flex min-w-0 flex-col">
             <span className="text-[15px] font-semibold">{statusText}</span>
             <span className="truncate text-xs text-zinc-500 dark:text-zinc-400">
-              {active ? active.name : "Профиль не выбран"}
+              {shown ? shown.name : "Профиль не выбран"}
             </span>
           </span>
         </button>
@@ -131,7 +127,7 @@ export function Home({ core, onEditProfile }: { core: CoreStatus | null; onEditP
         <div className="flex flex-col items-center justify-center gap-5 px-10 pb-8 pt-10">
           <button
             onClick={toggleConnection}
-            disabled={!active}
+            disabled={!active || switching}
             className={`flex h-52 w-52 flex-col items-center justify-center gap-2.5 rounded-full border-2 transition disabled:opacity-50 ${
               phase.live
                 ? "hero-live text-emerald-700 dark:text-emerald-400"
@@ -172,10 +168,10 @@ export function Home({ core, onEditProfile }: { core: CoreStatus | null; onEditP
             <span className="max-w-md text-center text-[13px] text-zinc-500 dark:text-zinc-400">
               {/* При ошибке причина уже показана красной плашкой ниже - здесь
                   дублировать её незачем. */}
-              {active
+              {shown
                 ? phase.hint && phase.tone !== "error"
-                  ? `${active.name} · ${phase.hint}`
-                  : active.name
+                  ? `${shown.name} · ${phase.hint}`
+                  : shown.name
                 : "Добавьте профиль, чтобы подключиться"}
             </span>
           </div>
@@ -210,7 +206,7 @@ export function Home({ core, onEditProfile }: { core: CoreStatus | null; onEditP
             Профили
           </span>
           <span className="text-xs text-zinc-400 dark:text-zinc-600">
-            {query ? `показано ${shown.length} из ${snap.list.length}` : plural(snap.list.length)}
+            {query ? `показано ${visible.length} из ${snap.list.length}` : plural(snap.list.length)}
           </span>
           <span className="h-px flex-1 bg-zinc-200 dark:bg-zinc-800" />
 
@@ -275,7 +271,7 @@ export function Home({ core, onEditProfile }: { core: CoreStatus | null; onEditP
             </div>
           )}
 
-          {snap.list.length > 0 && shown.length === 0 && (
+          {snap.list.length > 0 && visible.length === 0 && (
             <div className="flex flex-col items-center gap-1 py-10 text-center">
               <span className="text-[13px] text-zinc-500 dark:text-zinc-400">Ничего не найдено</span>
               <span className="text-xs text-zinc-400 dark:text-zinc-600">
@@ -284,7 +280,7 @@ export function Home({ core, onEditProfile }: { core: CoreStatus | null; onEditP
             </div>
           )}
 
-          {shown.map((p) => {
+          {visible.map((p) => {
             const isActive = p.id === snap.activeId;
             const live = isActive && running;
             const vpn = isVPN(p);

@@ -31,15 +31,15 @@ function subscribe(listener: () => void) {
   };
 }
 
-// Подпись первой занятой операции; пусто - работы нет.
-function snapshot(): string {
+/** Подпись первой занятой операции; пусто - работы нет. */
+export function busyLabel(): string {
   for (const label of flags.values()) return label;
   return "";
 }
 
 /** Подписка на общий признак ожидания. */
 export function useBusyLabel(): string {
-  return useSyncExternalStore(subscribe, snapshot, () => "");
+  return useSyncExternalStore(subscribe, busyLabel, () => "");
 }
 
 /** Держит отметку занятости, пока active истинно, и снимает её при уходе. */

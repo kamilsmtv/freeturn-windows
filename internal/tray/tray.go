@@ -15,8 +15,15 @@ type Handlers struct {
 // State - что показывать в значке.
 type State struct {
 	Connected bool
+	// Busy - переход: ядро запускается, останавливается или ждёт туннель.
+	// Связи ещё нет, но управление уже нужно: значок желтеет, а «Отключить»
+	// остаётся доступным.
+	Busy bool
 	// Failed - ядро остановилось с ошибкой; значок краснеет.
-	Failed  bool
+	Failed bool
+	// Title - подпись состояния в меню и подсказке. Пусто - значок
+	// подберёт её сам по Connected и Busy.
+	Title   string
 	Profile string
 	// Detail - строка под названием профиля (ошибка или состояние).
 	Detail string

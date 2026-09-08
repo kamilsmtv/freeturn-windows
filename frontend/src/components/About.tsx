@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
-import { backend, type AppInfo, type CoreStatus } from "../lib/api";
+import { backend, type AppInfo } from "../lib/api";
+import type { Phase } from "../lib/phase";
 import { Button } from "./ui";
 import { Logo } from "./Logo";
 
@@ -32,7 +33,16 @@ function InfoRow({ title, hint, children }: { title: string; hint?: string; chil
  * чей чужой труд внутри. Ссылки открываются во внешнем браузере - окно
  * приложения для этого не годится.
  */
-export function About({ info, core }: { info: AppInfo | null; core: CoreStatus | null }) {
+export function About({
+  info,
+  phase,
+  coreVersion,
+}: {
+  info: AppInfo | null;
+  phase: Phase;
+  /** Версия скачанного ядра; пусто - ещё не скачано. */
+  coreVersion: string;
+}) {
   if (!info) return null;
 
   const api = backend();
@@ -48,7 +58,7 @@ export function About({ info, core }: { info: AppInfo | null; core: CoreStatus |
         <div className="grid grid-cols-2 items-start gap-4">
           <div className="flex flex-col gap-4">
             <section className="flex items-center gap-4 rounded-2xl border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-[#131316]">
-              <Logo size={48} tone={core?.state === "running" ? "live" : "idle"} />
+              <Logo size={48} tone={phase.live ? "live" : "idle"} />
               <div className="min-w-0">
                 <div className="text-lg font-semibold">FreeTurn для Windows</div>
                 <div className="text-[13px] text-zinc-500 dark:text-zinc-400">
@@ -73,9 +83,9 @@ export function About({ info, core }: { info: AppInfo | null; core: CoreStatus |
               <InfoRow title="Приложение">
                 <span className="font-mono text-xs text-zinc-500 dark:text-zinc-400">{info.version}</span>
               </InfoRow>
-              <InfoRow title="Ядро" hint={core?.version ? "" : "Скачается при первом подключении"}>
+              <InfoRow title="Ядро" hint={coreVersion ? "" : "Скачается при первом подключении"}>
                 <span className="font-mono text-xs text-zinc-500 dark:text-zinc-400">
-                  {core?.version || "не скачано"}
+                  {coreVersion || "не скачано"}
                 </span>
               </InfoRow>
             </Group>

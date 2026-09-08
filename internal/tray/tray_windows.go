@@ -446,17 +446,27 @@ func (t *Tray) applyState() {
 		return
 	}
 
-	title := "Отключено"
-	if s.Connected {
-		title = "Подключено"
+	title := s.Title
+	if title == "" {
+		switch {
+		case s.Connected:
+			title = "Подключено"
+		case s.Busy:
+			title = "Подключение…"
+		default:
+			title = "Отключено"
+		}
 	}
 	if s.Profile != "" {
 		title += ": " + s.Profile
 	}
 	modifyItem(i.menu, idStatus, mfString|mfGrayed, title)
 
-	enable(i.menu, idConnect, !s.Connected)
-	enable(i.menu, idDisconnect, s.Connected)
+	// Во время перехода ядро уже работает: «Отключить» должно остаться
+	// доступным, иначе остановить его из трея будет нечем.
+	active := s.Connected || s.Busy
+	enable(i.menu, idConnect, !active)
+	enable(i.menu, idDisconnect, active)
 
 	t.applyIcon(s)
 
