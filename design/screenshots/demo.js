@@ -95,7 +95,9 @@
                        releaseUrl: "", canRollback: true, rollbackTarget: "v3.3.1", checkedAt: new Date().toISOString(), error: "" }),
     CheckGUIUpdate: ok({ current: "0.1.0", latest: "0.1.0", updateReady: false, changelog: "", releaseUrl: "", checkedAt: "", error: "" }),
     VPSProbe: ok({ ok: true, fingerprint: "", error: "", probe: probe }),
-    ExportLink: ok(DEMO_LINK),
+    ExportLink: function (id, includeVK) {
+      return Promise.resolve(DEMO_LINK + (includeVK ? "LnZrLnJ1L2NhbGwvam9pbi9FWEFNUExF" : ""));
+    },
     QRCode: function () { return Promise.resolve({ uri: qrDataURI(), modules: 65 }); },
     GenerateClientID: ok("c64a26ffcfd0540cecfd6fa2dbade293"),
     WintunInstalled: ok(true),

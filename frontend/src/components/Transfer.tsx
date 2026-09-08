@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { backend, type Profile } from "../lib/api";
+import { guard } from "../lib/effect";
 import { Button } from "./ui";
 import { CheckBox, Field, TextArea, TextInput } from "./Field";
 import { QRCode } from "./QRCode";
@@ -62,14 +63,27 @@ export function ShareDialog({ profile, onClose }: { profile: Profile; onClose: (
   const [error, setError] = useState("");
   const api = backend();
 
-  const build = async () => {
-    setError("");
-    try {
-      setUrl((await api?.ExportLink(profile.id, includeVK, clientId)) ?? "");
-    } catch (e) {
-      setError(String(e));
-    }
-  };
+  // Ссылку пересобираем на каждое изменение переключателей: иначе на экране
+  // (и в QR-коде) остаётся прежняя, и получатель сканирует не то, что видит
+  // отправитель.
+  useEffect(() => guard("ShareDialog/build", () => {
+    if (!api) return;
+
+    let alive = true;
+    // Небольшая задержка: Client ID набирают по символу, а каждая пересборка
+    // перерисовывает и QR-код.
+    const timer = setTimeout(() => {
+      setError("");
+      api
+        .ExportLink(profile.id, includeVK, clientId)
+        .then((v) => alive && setUrl(v))
+        .catch((e) => alive && setError(String(e)));
+    }, 200);
+    return () => {
+      alive = false;
+      clearTimeout(timer);
+    };
+  }), [profile.id, includeVK, clientId]);
 
   return (
     <Modal title={`Поделиться профилем «${profile.name}»`} onClose={onClose}>
@@ -82,6 +96,12 @@ export function ShareDialog({ profile, onClose }: { profile: Profile; onClose: (
         <p className="-mt-2 text-xs text-zinc-500">
           Обычно получатель создаёт свой звонок: ссылка уникальна для каждого клиента.
         </p>
+        {includeVK && profile.client.vkLink.trim() === "" && (
+          <p className="-mt-1 text-xs text-amber-600 dark:text-amber-400">
+            В профиле не заполнена ссылка на звонок, вкладывать нечего — получателю
+            придётся вписать свою.
+          </p>
+        )}
         <Field label="Client ID для получателя" hint="Владелец сервера добавляет его в allowlist">
           <div className="flex items-center gap-2">
             <TextInput value={clientId} onChange={setClientId} mono placeholder="необязательно" />
@@ -90,7 +110,6 @@ export function ShareDialog({ profile, onClose }: { profile: Profile; onClose: (
         </Field>
 
         <div className="flex items-center gap-2">
-          <Button onClick={build}>Собрать ссылку</Button>
           <Button
             onClick={async () => {
               setError("");

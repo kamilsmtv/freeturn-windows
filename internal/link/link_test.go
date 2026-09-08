@@ -1,6 +1,7 @@
 package link
 
 import (
+	"encoding/base64"
 	"errors"
 	"strings"
 	"testing"
@@ -164,4 +165,33 @@ func TestNormalizeWGConf(t *testing.T) {
 	if got != want {
 		t.Errorf("NormalizeWGConf = %q, want %q", got, want)
 	}
+}
+
+// Ключ "vk" - расширение Android-клиента: имя поля обязано совпасть, иначе
+// звонок в мобильном приложении молча не появится.
+func TestEncodeVKFieldName(t *testing.T) {
+	p := profile.New("RU-1")
+	p.Client.ServerAddress = "5.6.7.8:56000"
+	p.Client.VKLink = "https://vk.ru/call/join/abc"
+
+	raw := decodeLink(t, FromProfile(p, true, "").Encode())
+	if !strings.Contains(raw, `"vk":"https://vk.ru/call/join/abc"`) {
+		t.Errorf("в ссылке нет поля vk: %s", raw)
+	}
+
+	// Ищем именно ключ: значение "vk" есть и у поля provider.
+	if raw := decodeLink(t, FromProfile(p, false, "").Encode()); strings.Contains(raw, `"vk":`) {
+		t.Errorf("без согласия поля vk быть не должно: %s", raw)
+	}
+}
+
+// decodeLink возвращает JSON, спрятанный в ссылке freeturn://.
+func decodeLink(t *testing.T, url string) string {
+	t.Helper()
+
+	data, err := base64.RawURLEncoding.DecodeString(strings.TrimPrefix(url, "freeturn://"))
+	if err != nil {
+		t.Fatalf("тело ссылки не base64url: %v", err)
+	}
+	return string(data)
 }
