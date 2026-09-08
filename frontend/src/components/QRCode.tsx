@@ -3,8 +3,13 @@ import { backend, type QRImage } from "../lib/api";
 import { guard } from "../lib/effect";
 import { Button } from "./ui";
 
-/** Ориентир размера на экране - как в Android-клиенте, 320 dp. */
-const TARGET_SIDE = 320;
+/**
+ * Место под код на экране постоянно: сам код меняет размер вместе с длиной
+ * ссылки, и если бы он двигал соседей, при правке Client ID прыгал бы весь
+ * диалог. Ориентир взят у Android-клиента - около 320 dp.
+ */
+const BOX_SIDE = 300;
+const CODE_SIDE = 288;
 
 /**
  * Ссылка QR-кодом - как в Android-клиенте: получателю достаточно навести
@@ -21,18 +26,24 @@ export function QRCode({ text, name }: { text: string; name: string }) {
   const api = backend();
 
   useEffect(() => guard("QRCode/render", () => {
-    setImg(null);
     setNote("");
     setSaved("");
     setError("");
     if (!api || !text) return;
 
     let alive = true;
+    // Прежний код не убираем до готовности нового: иначе на каждое нажатие
+    // клавиши блок исчезал бы и появлялся.
     api
       .QRCode(text)
       .then((v) => alive && setImg(v))
       // Слишком длинная ссылка - не ошибка, а причина показать текст вместо кода.
-      .catch((e) => alive && setNote(String(e)));
+      .catch((e) => {
+        if (alive) {
+          setImg(null);
+          setNote(String(e));
+        }
+      });
     return () => {
       alive = false;
     };
@@ -44,17 +55,18 @@ export function QRCode({ text, name }: { text: string; name: string }) {
   if (!img) return null;
 
   // Модуль обязан занимать целое число пикселей: иначе границы плывут и
-  // камера не разбирает плотный код гостевой ссылки. Поэтому размер не
-  // подгоняется под 320 точно, а берётся ближайший кратный снизу; на очень
-  // длинной ссылке двух пикселей на модуль хватает, и код выходит шире.
+  // камера не разбирает плотный код гостевой ссылки. Поэтому берём ближайший
+  // кратный размер снизу - код всегда помещается в отведённое место.
   const modules = Math.max(img.modules, 1);
-  const side = modules * Math.max(2, Math.floor(TARGET_SIDE / modules));
+  const side = modules * Math.max(1, Math.floor(CODE_SIDE / modules));
 
   return (
     <div className="flex flex-col items-center gap-2.5">
-      {/* Код всегда чёрный на белом: сканеру важен контраст, а не тема окна.
-          Размер подобран так, чтобы диалог помещался в минимальное окно. */}
-      <div className="rounded-2xl bg-white p-2.5">
+      {/* Код всегда чёрный на белом: сканеру важен контраст, а не тема окна. */}
+      <div
+        className="flex items-center justify-center rounded-2xl bg-white"
+        style={{ width: BOX_SIDE, height: BOX_SIDE }}
+      >
         <img src={img.uri} alt="QR-код ссылки" width={side} height={side} />
       </div>
       <Button
