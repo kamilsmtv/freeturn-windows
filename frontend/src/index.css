@@ -81,3 +81,56 @@ textarea,
 .fade-bottom {
   mask-image: linear-gradient(to bottom, #000 0, #000 calc(100% - 20px), transparent 100%);
 }
+
+/* Бегунок общей полоски ожидания: сколько ждать - неизвестно, поэтому
+   индикатор неопределённый и просто показывает, что работа идёт. */
+@keyframes progress-slide {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(400%);
+  }
+}
+
+.progress-bar {
+  animation: progress-slide 1.1s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .progress-bar {
+    animation-duration: 2.4s;
+  }
+}
+
+/* Кнопка в переходном состоянии: тот же приём, что у рабочей, но
+   янтарный - видно, что связь ещё не установлена. */
+.hero-busy {
+  background: radial-gradient(circle at 50% 42%, #fef3c7 0%, #fde68a 55%, #fcd34d 100%);
+  border-color: #f59e0b;
+  box-shadow: 0 0 0 12px rgba(245, 158, 11, 0.08), 0 18px 48px rgba(245, 158, 11, 0.18);
+}
+
+.dark .hero-busy {
+  background: radial-gradient(circle at 50% 42%, #3b2f0b 0%, #2a2208 55%, #1f1906 100%);
+}
+
+/* Точка состояния пульсирует, пока идёт переход. */
+@keyframes dot-pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.3;
+  }
+}
+
+.dot-busy {
+  animation: dot-pulse 1.2s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dot-busy {
+    animation: none;
+  }
+}

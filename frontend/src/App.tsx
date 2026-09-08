@@ -11,6 +11,7 @@ import {
   type Settings,
   type Snapshot,
 } from "./lib/api";
+import { useBusyLabel, useBusyWhile } from "./lib/busy";
 import { guard } from "./lib/effect";
 import { applyTheme } from "./lib/theme";
 import { Card, EmptyState } from "./components/ui";
@@ -20,6 +21,7 @@ import { Home } from "./components/Home";
 import { LogView } from "./components/LogView";
 import { ProfileEditor } from "./components/ProfileEditor";
 import { Rail, type Screen } from "./components/Rail";
+import { TopProgress } from "./components/TopProgress";
 import { ServerPanel } from "./components/ServerPanel";
 import { SettingsScreen } from "./components/SettingsScreen";
 import { Updates } from "./components/Updates";
@@ -47,6 +49,12 @@ export default function App() {
   }), []);
 
   useEffect(() => applyTheme(settings?.theme ?? "system"), [settings?.theme]);
+
+  // Переходы ядра видны из любого раздела: полоска показывает их и на
+  // экране сервера, и в настройках.
+  const transition = core?.state === "starting" || core?.state === "stopping";
+  useBusyWhile("core", transition, core?.state === "stopping" ? "Отключение" : "Запуск ядра");
+  const busyLabel = useBusyLabel();
 
   const patch = (p: Partial<Settings>) => {
     if (!settings) return;
@@ -93,6 +101,7 @@ export default function App() {
       <Rail screen={screen} onScreen={(s) => { setDraft(null); setScreen(s); }} core={core} />
 
       <main className="flex min-w-0 flex-1 flex-col overflow-hidden">
+        <TopProgress active={busyLabel !== ""} label={busyLabel} />
         <EnvBanner env={env} />
         {/* Отдельный контейнер: без него баннер съедает высоту экранов,
             которые тянутся на 100% и считают её от всего main. */}

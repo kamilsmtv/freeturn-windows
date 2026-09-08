@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { backend, EVENTS, onEvent, type Profile, type ProbeData, type VPSResult } from "../lib/api";
 import { Button } from "./ui";
 import { Field, NumberInput, Picker, TextArea, TextInput } from "./Field";
+import { useBusyWhile } from "../lib/busy";
 import { guard } from "../lib/effect";
 import { QRCode } from "./QRCode";
 
@@ -137,6 +138,9 @@ export function ServerPanel({ profile, onProfile }: { profile: Profile; onProfil
       setError(String(e));
     }
   };
+
+  // Пока команда выполняется, вверху окна идёт полоска ожидания.
+  useBusyWhile("vps", busy !== "", "Команда серверу");
 
   const idle = busy === "" && api !== null;
   // Команды работают с сохранённым профилем: несохранённые правки бэкенд не увидит.

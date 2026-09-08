@@ -9,20 +9,14 @@ import {
   type Traffic,
   type TunnelStatus,
 } from "../lib/api";
+import { useBusyWhile } from "../lib/busy";
 import { guard } from "../lib/effect";
+import { connectionPhase, isVPN } from "../lib/phase";
 import { bytes, uptime } from "../lib/format";
 import { ImportDialog, ShareDialog } from "./Transfer";
 
 /** Порог, с которого список перестаёт читаться взглядом и нужен поиск. */
 const SEARCH_FROM = 6;
-
-const STATE_TEXT: Record<CoreStatus["state"], string> = {
-  stopped: "Отключено",
-  starting: "Подключение…",
-  running: "Подключено",
-  stopping: "Отключение…",
-  failed: "Ошибка",
-};
 
 /**
  * Главный экран: одна большая кнопка, под ней состояние, внизу — список
@@ -96,8 +90,13 @@ export function Home({ core, onEditProfile }: { core: CoreStatus | null; onEditP
     running ? run(() => api!.CoreStop()) : active ? run(() => api!.CoreStart(active)) : undefined;
 
   const heroLabel = running ? "Отключить" : "Подключить";
-  const statusText = STATE_TEXT[core?.state ?? "stopped"];
-  const problem = error || (core?.state === "failed" ? core.error : "") || tunnel?.error || "";
+  const phase = connectionPhase(core, tunnel, active);
+  const statusText = phase.text;
+  // Полоска вверху окна: пока идёт переход, видно, что приложение занято.
+  useBusyWhile("connection", phase.busy, phase.text);
+  // Ошибку фазы показывает подпись под кнопкой - здесь только то, что
+  // относится к самому окну (не удалось запустить, не сохранился профиль).
+  const problem = error || (phase.tone === "error" ? phase.hint : "");
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
@@ -112,9 +111,11 @@ export function Home({ core, onEditProfile }: { core: CoreStatus | null; onEditP
               toggleConnection();
             }}
             className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full border-2 ${
-              running
+              phase.live
                 ? "border-emerald-500 bg-emerald-500/10 text-emerald-500"
-                : "border-zinc-300 text-zinc-400 dark:border-zinc-700 dark:text-zinc-500"
+                : phase.busy
+                  ? "border-amber-500 bg-amber-500/10 text-amber-500"
+                  : "border-zinc-300 text-zinc-400 dark:border-zinc-700 dark:text-zinc-500"
             }`}
           >
             <PowerIcon size={20} />
@@ -132,15 +133,21 @@ export function Home({ core, onEditProfile }: { core: CoreStatus | null; onEditP
             onClick={toggleConnection}
             disabled={!active}
             className={`flex h-52 w-52 flex-col items-center justify-center gap-2.5 rounded-full border-2 transition disabled:opacity-50 ${
-              running
+              phase.live
                 ? "hero-live text-emerald-700 dark:text-emerald-400"
-                : "border-zinc-300 bg-white text-zinc-500 hover:border-zinc-400 dark:border-zinc-800 dark:bg-[#131316] dark:text-zinc-500 dark:hover:border-zinc-700"
+                : phase.busy
+                  ? "hero-busy text-amber-700 dark:text-amber-300"
+                  : "border-zinc-300 bg-white text-zinc-500 hover:border-zinc-400 dark:border-zinc-800 dark:bg-[#131316] dark:text-zinc-500 dark:hover:border-zinc-700"
             }`}
           >
             <PowerIcon size={52} />
             <span
               className={`text-[15px] font-semibold tracking-wide ${
-                running ? "text-emerald-900 dark:text-emerald-100" : "text-zinc-600 dark:text-zinc-300"
+                phase.live
+                  ? "text-emerald-900 dark:text-emerald-100"
+                  : phase.busy
+                    ? "text-amber-900 dark:text-amber-100"
+                    : "text-zinc-600 dark:text-zinc-300"
               }`}
             >
               {heroLabel}
@@ -151,25 +158,29 @@ export function Home({ core, onEditProfile }: { core: CoreStatus | null; onEditP
             <div className="flex items-center gap-2">
               <span
                 className={`h-2 w-2 rounded-full ${
-                  core?.state === "running"
+                  phase.live
                     ? "bg-emerald-500"
-                    : core?.state === "failed"
+                    : phase.tone === "error"
                       ? "bg-red-500"
-                      : running
-                        ? "bg-amber-500"
+                      : phase.busy
+                        ? "dot-busy bg-amber-500"
                         : "bg-zinc-400"
                 }`}
               />
               <span className="text-xl font-semibold">{statusText}</span>
             </div>
-            <span className="text-[13px] text-zinc-500 dark:text-zinc-400">
+            <span className="max-w-md text-center text-[13px] text-zinc-500 dark:text-zinc-400">
+              {/* При ошибке причина уже показана красной плашкой ниже - здесь
+                  дублировать её незачем. */}
               {active
-                ? `${active.name}${tunnel?.up ? " · туннель поднят" : ""}`
+                ? phase.hint && phase.tone !== "error"
+                  ? `${active.name} · ${phase.hint}`
+                  : active.name
                 : "Добавьте профиль, чтобы подключиться"}
             </span>
           </div>
 
-          {running && (
+          {phase.live && (
             <div className="flex items-center rounded-full border border-zinc-200 bg-white px-1.5 py-2 dark:border-zinc-800 dark:bg-zinc-900">
               {core?.startedAt && (
                 <>
@@ -276,7 +287,7 @@ export function Home({ core, onEditProfile }: { core: CoreStatus | null; onEditP
           {shown.map((p) => {
             const isActive = p.id === snap.activeId;
             const live = isActive && running;
-            const vpn = p.client.tunnelTransport === "wireguard";
+            const vpn = isVPN(p);
             return (
               <div
                 key={p.id}
@@ -336,7 +347,7 @@ export function Home({ core, onEditProfile }: { core: CoreStatus | null; onEditP
           </p>
         )}
 
-        {running && !problem && tunnel && !tunnel.enabled && (
+        {phase.live && !problem && !isVPN(active) && (
           <p className="rounded-xl bg-amber-100 px-4 py-2.5 text-xs text-amber-900 dark:bg-amber-950 dark:text-amber-200">
             Профиль работает в режиме прокси: ядро слушает{" "}
             <span className="font-mono">{active?.client.localPort || "127.0.0.1:9000"}</span> и трафик системы

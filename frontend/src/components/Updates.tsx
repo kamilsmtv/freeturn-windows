@@ -8,6 +8,7 @@ import {
   type UpdateStatus,
 } from "../lib/api";
 import { Button, Card, Row } from "./ui";
+import { useBusyWhile } from "../lib/busy";
 import { guard } from "../lib/effect";
 
 const STAGE_LABEL: Record<UpdateProgress["stage"], string> = {
@@ -52,6 +53,9 @@ export function Updates() {
   };
 
   const api = backend();
+
+  // Скачивание и проверка версий идут заметное время - показываем полоской.
+  useBusyWhile("update", busy, "Обновление ядра");
 
   return (
     <div className="flex flex-col gap-4">
