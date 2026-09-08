@@ -7,8 +7,10 @@ import { QRCode } from "./QRCode";
 function Modal({ title, children, onClose }: { title: string; children: React.ReactNode; onClose: () => void }) {
   return (
     <div className="fixed inset-0 z-10 flex items-center justify-center bg-black/40 p-6" onClick={onClose}>
+      {/* Диалог должен помещаться в минимальное окно (900x600): с QR-кодом
+          содержимое выше экрана, поэтому прокручиваем сам диалог. */}
       <div
-        className="w-full max-w-lg rounded-xl bg-white p-5 shadow-xl dark:bg-zinc-900"
+        className="scroll max-h-full w-full max-w-lg overflow-y-auto rounded-xl bg-white p-5 shadow-xl dark:bg-zinc-900"
         onClick={(e) => e.stopPropagation()}
       >
         <h2 className="mb-4 text-sm font-semibold">{title}</h2>

@@ -41,7 +41,7 @@ func (a *App) ExportLog() (string, error) {
 //
 // Так же делится ссылками Android-клиент: сосед наводит камеру и получает
 // профиль целиком, не пересылая длинную строку через мессенджер.
-func (a *App) QRCode(text string) (string, error) {
+func (a *App) QRCode(text string) (qr.Image, error) {
 	return qr.DataURI(text)
 }
 
@@ -52,11 +52,7 @@ func (a *App) SaveQRCode(text, name string) (string, error) {
 		return "", err
 	}
 
-	file := safeFileName(name)
-	if file == "" {
-		file = "freeturn"
-	}
-	path, err := a.saveFileDialog("Сохранить QR-код", file+"-qr.png",
+	path, err := a.saveFileDialog("Сохранить QR-код", safeFileName(name)+"-qr.png",
 		[]wailsruntime.FileFilter{{DisplayName: "Картинка PNG (*.png)", Pattern: "*.png"}})
 	if err != nil || path == "" {
 		return "", err

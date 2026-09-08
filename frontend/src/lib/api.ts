@@ -193,7 +193,7 @@ type Backend = {
   ImportBackup(password: string): Promise<number>;
   CoreStart(p: Profile): Promise<void>;
   ExportLog(): Promise<string>;
-  QRCode(text: string): Promise<string>;
+  QRCode(text: string): Promise<QRImage>;
   SaveQRCode(text: string, name: string): Promise<string>;
   PrepareWGConfig(profileId: string): Promise<string>;
   SaveWGConfig(profileId: string): Promise<string>;
@@ -259,6 +259,11 @@ export type VPSResult = {
   probe?: ProbeData;
   text?: string;
   profile?: Profile;
+};
+
+export type QRImage = {
+  uri: string;
+  modules: number;
 };
 
 export type Traffic = {

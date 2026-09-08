@@ -63,8 +63,8 @@
   // Демонстрационная ссылка и заглушка QR: настоящий код рисует бэкенд.
   var DEMO_LINK = "freeturn://eyJ2IjoxLCJuYW1lIjoidmRzaW5hIE5MMDEiLCJob3N0IjoiMjAzLjAuMTEzLjEwIn0";
   function qrDataURI() {
-    var n = 25;
-    var cell = 8;
+    var n = 65;
+    var cell = 4;
     var svg = '<svg xmlns="http://www.w3.org/2000/svg" width="' + n * cell + '" height="' + n * cell + '">';
     svg += '<rect width="100%" height="100%" fill="#fff"/>';
     var seed = 7;
@@ -96,7 +96,7 @@
     CheckGUIUpdate: ok({ current: "0.1.0", latest: "0.1.0", updateReady: false, changelog: "", releaseUrl: "", checkedAt: "", error: "" }),
     VPSProbe: ok({ ok: true, fingerprint: "", error: "", probe: probe }),
     ExportLink: ok(DEMO_LINK),
-    QRCode: function (text) { return Promise.resolve(qrDataURI(text)); },
+    QRCode: function () { return Promise.resolve({ uri: qrDataURI(), modules: 65 }); },
     GenerateClientID: ok("c64a26ffcfd0540cecfd6fa2dbade293"),
     WintunInstalled: ok(true),
   } } };
