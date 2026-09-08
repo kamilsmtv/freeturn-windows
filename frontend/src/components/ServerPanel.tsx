@@ -3,6 +3,7 @@ import { backend, EVENTS, onEvent, type Profile, type ProbeData, type VPSResult 
 import { Button } from "./ui";
 import { Field, NumberInput, Picker, TextArea, TextInput } from "./Field";
 import { guard } from "../lib/effect";
+import { QRCode } from "./QRCode";
 
 /**
  * Управление сервером по SSH. Все команды идут через install.sh ядра:
@@ -351,6 +352,8 @@ export function ServerPanel({ profile, onProfile }: { profile: Profile; onProfil
                   <pre className="scroll selectable max-h-28 overflow-auto rounded-lg bg-zinc-950 p-3 font-mono text-xs text-zinc-300">
                     {share}
                   </pre>
+                  {/* Гостю удобнее навести камеру, чем переносить длинную строку. */}
+                  <QRCode text={share} name={peerName.trim() || profile.name} />
                   <div>
                     <Button onClick={() => navigator.clipboard.writeText(share)}>Скопировать ссылку</Button>
                   </div>

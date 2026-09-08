@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/kamilsmtv/freeturn-windows/internal/netstat"
+	"github.com/kamilsmtv/freeturn-windows/internal/qr"
 	"github.com/kamilsmtv/freeturn-windows/internal/wg"
 	wailsruntime "github.com/wailsapp/wails/v2/pkg/runtime"
 )
@@ -34,6 +35,34 @@ func (a *App) ExportLog() (string, error) {
 		fmt.Fprintf(&b, "%s %s\r\n", l.Time, l.Text)
 	}
 	return path, os.WriteFile(path, []byte(b.String()), 0o600)
+}
+
+// QRCode рисует ссылку QR-кодом и отдаёт картинку как data URI.
+//
+// Так же делится ссылками Android-клиент: сосед наводит камеру и получает
+// профиль целиком, не пересылая длинную строку через мессенджер.
+func (a *App) QRCode(text string) (string, error) {
+	return qr.DataURI(text)
+}
+
+// SaveQRCode сохраняет QR-код ссылки в PNG-файл.
+func (a *App) SaveQRCode(text, name string) (string, error) {
+	png, err := qr.PNG(text)
+	if err != nil {
+		return "", err
+	}
+
+	file := safeFileName(name)
+	if file == "" {
+		file = "freeturn"
+	}
+	path, err := a.saveFileDialog("Сохранить QR-код", file+"-qr.png",
+		[]wailsruntime.FileFilter{{DisplayName: "Картинка PNG (*.png)", Pattern: "*.png"}})
+	if err != nil || path == "" {
+		return "", err
+	}
+	// Тот же режим, что у ссылки в файле: внутри ключи, читать её посторонним незачем.
+	return path, os.WriteFile(path, png, 0o600)
 }
 
 // PrepareWGConfig подставляет в конфиг WireGuard параметры работы через ядро.

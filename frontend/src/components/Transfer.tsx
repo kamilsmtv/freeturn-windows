@@ -2,6 +2,7 @@ import { useState } from "react";
 import { backend, type Profile } from "../lib/api";
 import { Button } from "./ui";
 import { CheckBox, Field, TextArea, TextInput } from "./Field";
+import { QRCode } from "./QRCode";
 
 function Modal({ title, children, onClose }: { title: string; children: React.ReactNode; onClose: () => void }) {
   return (
@@ -105,6 +106,7 @@ export function ShareDialog({ profile, onClose }: { profile: Profile; onClose: (
 
         {url && (
           <>
+            <QRCode text={url} name={profile.name} />
             <Field label="Ссылка">
               <TextArea value={url} onChange={() => {}} rows={4} />
             </Field>

@@ -193,6 +193,8 @@ type Backend = {
   ImportBackup(password: string): Promise<number>;
   CoreStart(p: Profile): Promise<void>;
   ExportLog(): Promise<string>;
+  QRCode(text: string): Promise<string>;
+  SaveQRCode(text: string, name: string): Promise<string>;
   PrepareWGConfig(profileId: string): Promise<string>;
   SaveWGConfig(profileId: string): Promise<string>;
   TrafficStats(): Promise<Traffic>;

@@ -60,6 +60,26 @@
 
   var ok = function (v) { return function () { return Promise.resolve(v); }; };
 
+  // Демонстрационная ссылка и заглушка QR: настоящий код рисует бэкенд.
+  var DEMO_LINK = "freeturn://eyJ2IjoxLCJuYW1lIjoidmRzaW5hIE5MMDEiLCJob3N0IjoiMjAzLjAuMTEzLjEwIn0";
+  function qrDataURI() {
+    var n = 25;
+    var cell = 8;
+    var svg = '<svg xmlns="http://www.w3.org/2000/svg" width="' + n * cell + '" height="' + n * cell + '">';
+    svg += '<rect width="100%" height="100%" fill="#fff"/>';
+    var seed = 7;
+    for (var y = 0; y < n; y++) {
+      for (var x = 0; x < n; x++) {
+        seed = (seed * 1103515245 + 12345) % 2147483648;
+        var finder = (x < 7 && y < 7) || (x >= n - 7 && y < 7) || (x < 7 && y >= n - 7);
+        var on = finder ? (x % 6 === 0 || y % 6 === 0 || (x > 1 && x < 5 && y > 1 && y < 5)) : seed % 2 === 0;
+        if (on) svg += '<rect x="' + x * cell + '" y="' + y * cell + '" width="' + cell + '" height="' + cell + '" fill="#000"/>';
+      }
+    }
+    svg += "</svg>";
+    return "data:image/svg+xml;base64," + btoa(svg);
+  }
+
   window.runtime = { EventsOn: function () { return function () {}; }, LogError: function () {} };
   window.go = { main: { App: {
     Environment: ok({ admin: true, webView2: true, webView2Version: "126.0", windows: true }),
@@ -75,6 +95,9 @@
                        releaseUrl: "", canRollback: true, rollbackTarget: "v3.3.1", checkedAt: new Date().toISOString(), error: "" }),
     CheckGUIUpdate: ok({ current: "0.1.0", latest: "0.1.0", updateReady: false, changelog: "", releaseUrl: "", checkedAt: "", error: "" }),
     VPSProbe: ok({ ok: true, fingerprint: "", error: "", probe: probe }),
+    ExportLink: ok(DEMO_LINK),
+    QRCode: function (text) { return Promise.resolve(qrDataURI(text)); },
+    GenerateClientID: ok("c64a26ffcfd0540cecfd6fa2dbade293"),
     WintunInstalled: ok(true),
   } } };
 
