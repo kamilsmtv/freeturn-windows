@@ -13,8 +13,9 @@ import {
 } from "./lib/api";
 import { guard } from "./lib/effect";
 import { applyTheme } from "./lib/theme";
-import { Button, Card, EmptyState, Row } from "./components/ui";
+import { Card, EmptyState } from "./components/ui";
 import { ErrorBoundary } from "./components/ErrorBoundary";
+import { About } from "./components/About";
 import { Home } from "./components/Home";
 import { LogView } from "./components/LogView";
 import { ProfileEditor } from "./components/ProfileEditor";
@@ -130,36 +131,6 @@ function ServerTab() {
   }
   return (
     <ServerPanel profile={active} onProfile={() => {}} />
-  );
-}
-
-function About({ info, core }: { info: AppInfo | null; core: CoreStatus | null }) {
-  if (!info) return null;
-  const api = backend();
-
-  return (
-    <div className="scroll h-full overflow-y-auto px-8 py-6">
-      <Card title="О программе">
-        <Row label="Версия приложения">{info.version}</Row>
-        <Row label="Версия ядра" hint={info.coreDir}>
-          <span className="font-mono text-xs text-zinc-500">{core?.version || "неизвестна"}</span>
-        </Row>
-        <Row label="Конфиги и логи" hint={info.dataDir}>
-          <Button onClick={() => api?.OpenDataDir()}>Открыть</Button>
-        </Row>
-        <Row label="Ядро" hint="free-turn-proxy, автор samosvalishe">
-          <Button onClick={() => api?.OpenURL(`https://github.com/${info.coreRepo}`)}>GitHub</Button>
-        </Row>
-        <Row label="Android-клиент" hint="turn-proxy-android — источник модели данных и формата бэкапа">
-          <Button onClick={() => api?.OpenURL("https://github.com/samosvalishe/turn-proxy-android")}>
-            GitHub
-          </Button>
-        </Row>
-        <p className="pt-3 text-xs text-zinc-500 dark:text-zinc-400">
-          Проект создан в образовательных целях. Лицензия GPL-3.0.
-        </p>
-      </Card>
-    </div>
   );
 }
 
