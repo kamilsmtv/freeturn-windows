@@ -1,0 +1,728 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin: 0; font-family: system-ui, "Segoe UI", sans-serif; }
+    a { color: #34d399; text-decoration: none; }
+    a:hover { color: #6ee7b7; }
+    .nav-item { cursor: pointer; }
+    .row { cursor: pointer; }
+    .btn { cursor: pointer; }
+
+    /* Системная полоса прокрутки выбивается из тёмной темы: делаем её
+       частью интерфейса - тонкой, без дорожки, заметной при наведении.
+       Место под неё резервируем всегда, иначе строки дёргаются. */
+    .scroll {
+      scrollbar-width: thin;
+      scrollbar-color: #2f2f33 transparent;
+      scrollbar-gutter: stable;
+    }
+    .scroll::-webkit-scrollbar { width: 10px; }
+    .scroll::-webkit-scrollbar-track { background: transparent; }
+    .scroll::-webkit-scrollbar-thumb {
+      background: #2f2f33;
+      border-radius: 999px;
+      border: 3px solid transparent;
+      background-clip: content-box;
+    }
+    .scroll:hover::-webkit-scrollbar-thumb { background: #4b4b52; background-clip: content-box; }
+    .scroll::-webkit-scrollbar-thumb:active { background: #5f5f66; background-clip: content-box; }
+  </style>
+</helmet>
+
+<div style="width: 1100px; height: 760px; display: flex; background: #09090b; color: #fafafa; overflow: hidden">
+
+  <!-- Навигация: нижние вкладки Android, перенесённые на левый край -->
+  <div style="width: 88px; flex-shrink: 0; display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 16px 0; background: #0c0c0e; border-right: 1px solid #27272a">
+    <div style="width: 36px; height: 36px; border-radius: 999px; border: 5px solid {{mark.color}}; background: #18181b; display: flex; align-items: center; justify-content: center; margin-bottom: 20px">
+      <div style="width: 10px; height: 10px; border-radius: 999px; background: {{mark.color}}"></div>
+    </div>
+
+    <div class="nav-item" onClick="{{nav.home.go}}" style="display: flex; flex-direction: column; align-items: center; gap: 6px; width: 72px; padding: 10px 0; border-radius: 12px; background: {{nav.home.bg}}">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="{{nav.home.color}}" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M12 3 3 10v10a1 1 0 0 0 1 1h5v-7h6v7h5a1 1 0 0 0 1-1V10z"></path>
+      </svg>
+      <span style="font-size: 11px; color: {{nav.home.color}}">Главная</span>
+    </div>
+
+    <div class="nav-item" onClick="{{nav.server.go}}" style="display: flex; flex-direction: column; align-items: center; gap: 6px; width: 72px; padding: 10px 0; border-radius: 12px; background: {{nav.server.bg}}">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="{{nav.server.color}}" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="3" y="4" width="18" height="7" rx="2"></rect>
+        <rect x="3" y="13" width="18" height="7" rx="2"></rect>
+        <path d="M7 7.5h.01M7 16.5h.01"></path>
+      </svg>
+      <span style="font-size: 11px; color: {{nav.server.color}}">Сервер</span>
+    </div>
+
+    <div class="nav-item" onClick="{{nav.logs.go}}" style="display: flex; flex-direction: column; align-items: center; gap: 6px; width: 72px; padding: 10px 0; border-radius: 12px; background: {{nav.logs.bg}}">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="{{nav.logs.color}}" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M4 5h16M4 10h16M4 15h10M4 20h7"></path>
+      </svg>
+      <span style="font-size: 11px; color: {{nav.logs.color}}">Журнал</span>
+    </div>
+
+    <div class="nav-item" onClick="{{nav.settings.go}}" style="display: flex; flex-direction: column; align-items: center; gap: 6px; width: 72px; padding: 10px 0; border-radius: 12px; background: {{nav.settings.bg}}">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="{{nav.settings.color}}" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="3.2"></circle>
+        <path d="M12 3v2.5M12 18.5V21M21 12h-2.5M5.5 12H3M18.4 5.6l-1.8 1.8M7.4 16.6l-1.8 1.8M18.4 18.4l-1.8-1.8M7.4 7.4 5.6 5.6"></path>
+      </svg>
+      <span style="font-size: 11px; color: {{nav.settings.color}}">Настройки</span>
+    </div>
+  </div>
+
+  <div style="flex-grow: 1; display: flex; flex-direction: column; overflow: hidden">
+
+    <!-- ГЛАВНАЯ -->
+    <sc-if value="{{screen.home}}" hint-placeholder-val="{{ true }}">
+      <div style="flex-grow: 1; display: flex; flex-direction: column; overflow: hidden">
+
+        <sc-if value="{{heroVisible}}" hint-placeholder-val="{{ true }}">
+        <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 20px; padding: 44px 40px 32px">
+
+          <div class="btn" onClick="{{toggle}}" style="width: 208px; height: 208px; border-radius: 999px; background: {{hero.bg}}; border: 2px solid {{hero.border}}; box-shadow: {{hero.shadow}}; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px">
+            <svg width="52" height="52" viewBox="0 0 24 24" fill="none" stroke="{{hero.icon}}" stroke-width="1.7" stroke-linecap="round">
+              <path d="M12 3v9"></path>
+              <path d="M18.4 6.6a9 9 0 1 1-12.8 0"></path>
+            </svg>
+            <span style="font-size: 15px; font-weight: 600; color: {{hero.label}}; letter-spacing: 0.02em">{{hero.action}}</span>
+          </div>
+
+          <div style="display: flex; flex-direction: column; align-items: center; gap: 8px">
+            <div style="display: flex; align-items: center; gap: 8px">
+              <span style="width: 8px; height: 8px; border-radius: 999px; background: {{status.dot}}"></span>
+              <span style="font-size: 20px; font-weight: 600; color: {{status.color}}">{{status.title}}</span>
+            </div>
+            <span style="font-size: 13px; color: #71717a">{{status.hint}}</span>
+          </div>
+
+          <sc-if value="{{connected}}" hint-placeholder-val="{{ true }}">
+            <div style="display: flex; align-items: center; gap: 0; padding: 8px 6px; border-radius: 999px; background: #18181b; border: 1px solid #27272a">
+              <div style="display: flex; align-items: center; gap: 8px; padding: 0 16px">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#71717a" stroke-width="1.8" stroke-linecap="round">
+                  <circle cx="12" cy="12" r="9"></circle>
+                  <path d="M12 7v5l3 2"></path>
+                </svg>
+                <span style="font-size: 13px; color: #e4e4e7">1 ч 04 мин</span>
+              </div>
+              <span style="width: 1px; height: 18px; background: #27272a"></span>
+              <div style="display: flex; align-items: center; gap: 8px; padding: 0 16px">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M12 19V5M6 11l6-6 6 6"></path>
+                </svg>
+                <span style="font-size: 13px; color: #e4e4e7">184 МиБ</span>
+              </div>
+              <span style="width: 1px; height: 18px; background: #27272a"></span>
+              <div style="display: flex; align-items: center; gap: 8px; padding: 0 16px">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M12 5v14M6 13l6 6 6-6"></path>
+                </svg>
+                <span style="font-size: 13px; color: #e4e4e7">1,4 ГиБ</span>
+              </div>
+            </div>
+          </sc-if>
+        </div>
+        </sc-if>
+
+        <!-- Свёрнутая шапка: остаётся, когда список профилей развёрнут -->
+        <sc-if value="{{compactVisible}}" hint-placeholder-val="{{ true }}">
+          <div class="row" onClick="{{toggleSheet}}" style="display: flex; align-items: center; gap: 14px; padding: 18px 32px">
+            <div class="btn" onClick="{{toggle}}" style="width: 44px; height: 44px; border-radius: 999px; background: {{hero.bg}}; border: 2px solid {{hero.border}}; display: flex; align-items: center; justify-content: center; flex-shrink: 0">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="{{hero.icon}}" stroke-width="1.8" stroke-linecap="round">
+                <path d="M12 3v9"></path>
+                <path d="M18.4 6.6a9 9 0 1 1-12.8 0"></path>
+              </svg>
+            </div>
+            <div style="display: flex; flex-direction: column; gap: 2px; flex-grow: 1">
+              <span style="font-size: 15px; font-weight: 600; color: {{status.color}}">{{status.title}}</span>
+              <span style="font-size: 12px; color: #71717a">{{status.hint}}</span>
+            </div>
+          </div>
+        </sc-if>
+
+        <div style="flex-grow: 1; display: flex; flex-direction: column; gap: 12px; padding: 20px 32px 24px; background: #111113; border-top: 1px solid #27272a; border-radius: 20px 20px 0 0; min-height: 0">
+
+          <div style="display: flex; align-items: center; gap: 12px">
+            <span style="font-size: 13px; font-weight: 600; color: #a1a1aa; letter-spacing: 0.04em; text-transform: uppercase">Профили</span>
+            <span style="font-size: 12px; color: #52525b">{{listCount}}</span>
+            <span style="flex-grow: 1; height: 1px; background: #27272a"></span>
+
+            <sc-if value="{{searchVisible}}" hint-placeholder-val="{{ true }}">
+              <div style="display: flex; align-items: center; gap: 8px; height: 32px; padding: 0 12px; border-radius: 8px; background: #18181b; border: 1px solid #27272a">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#71717a" stroke-width="1.8" stroke-linecap="round">
+                  <circle cx="11" cy="11" r="6.5"></circle><path d="M16 16l4 4"></path>
+                </svg>
+                <input value="{{query}}" onInput="{{onQuery}}" placeholder="Поиск" style="width: 150px; border: none; outline: none; background: transparent; color: #fafafa; font-family: inherit; font-size: 13px" />
+              </div>
+            </sc-if>
+
+            <div class="btn" onClick="{{toggleSheet}}" style="display: flex; align-items: center; gap: 6px; height: 32px; padding: 0 12px; border-radius: 8px; background: #18181b; border: 1px solid #27272a">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#a1a1aa" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="transform: {{sheetArrow}}">
+                <path d="M6 15l6-6 6 6"></path>
+              </svg>
+              <span style="font-size: 13px; color: #e4e4e7">{{sheetLabel}}</span>
+            </div>
+
+            <div class="btn" style="display: flex; align-items: center; gap: 6px; height: 32px; padding: 0 14px; border-radius: 8px; background: #18181b; border: 1px solid #27272a">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#a1a1aa" stroke-width="1.8" stroke-linecap="round">
+                <path d="M12 5v14M5 12h14"></path>
+              </svg>
+              <span style="font-size: 13px; color: #e4e4e7">Добавить</span>
+            </div>
+          </div>
+
+          <div class="scroll" style="flex-grow: 1; display: flex; flex-direction: column; gap: 8px; overflow-y: auto; min-height: 0; mask-image: linear-gradient(to bottom, #000 0, #000 calc(100% - 20px), transparent 100%)">
+            <sc-for list="{{profiles}}" as="p" hint-placeholder-count="4">
+              <div class="row" onClick="{{p.pick}}" style="display: flex; align-items: center; gap: 14px; padding: 14px 16px; border-radius: 12px; background: #18181b; border: 1px solid {{p.border}}">
+                <span style="width: 10px; height: 10px; border-radius: 999px; background: {{p.dot}}; flex-shrink: 0"></span>
+                <div style="display: flex; flex-direction: column; gap: 3px; flex-grow: 1; min-width: 0">
+                  <span style="font-size: 14px; font-weight: 600">{{p.name}}</span>
+                  <span style="font-size: 12px; color: #71717a">{{p.address}}</span>
+                </div>
+                <div style="display: flex; align-items: center; gap: 6px">
+                  <span style="font-size: 11px; color: {{p.modeColor}}; background: {{p.modeBg}}; border-radius: 999px; padding: 4px 10px">{{p.mode}}</span>
+                  <span style="font-size: 11px; color: #a1a1aa; background: #27272a; border-radius: 999px; padding: 4px 10px">{{p.obf}}</span>
+                </div>
+                <div class="btn" onClick="{{p.open}}" style="display: flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: 8px">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#71717a" stroke-width="1.8" stroke-linecap="round">
+                    <circle cx="12" cy="5" r="1.4"></circle>
+                    <circle cx="12" cy="12" r="1.4"></circle>
+                    <circle cx="12" cy="19" r="1.4"></circle>
+                  </svg>
+                </div>
+              </div>
+            </sc-for>
+
+            <sc-if value="{{nothingFound}}" hint-placeholder-val="{{ true }}">
+              <div style="display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 32px 0">
+                <span style="font-size: 13px; color: #a1a1aa">Ничего не найдено</span>
+                <span style="font-size: 12px; color: #52525b">Проверьте название или адрес сервера</span>
+              </div>
+            </sc-if>
+          </div>
+
+          <sc-if value="{{warningVisible}}" hint-placeholder-val="{{ true }}">
+            <div style="display: flex; align-items: center; gap: 10px; padding: 12px 16px; border-radius: 12px; background: #1c1917; border: 1px solid #422006">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="1.8" stroke-linecap="round">
+                <path d="M12 9v4M12 17h.01"></path>
+                <path d="M10.3 3.9 2.6 17.2A1.9 1.9 0 0 0 4.3 20h15.4a1.9 1.9 0 0 0 1.7-2.8L13.7 3.9a1.9 1.9 0 0 0-3.4 0z"></path>
+              </svg>
+              <span style="font-size: 12px; color: #fcd34d; flex-grow: 1">Ссылка на звонок VK истекает — обновите её, чтобы соединение не разорвалось</span>
+              <span style="font-size: 12px; color: #fcd34d; text-decoration: underline">Обновить</span>
+            </div>
+          </sc-if>
+        </div>
+      </div>
+    </sc-if>
+
+    <!-- ПРОФИЛЬ -->
+    <sc-if value="{{screen.profile}}" hint-placeholder-val="{{ true }}">
+      <div style="flex-grow: 1; display: flex; flex-direction: column; overflow: hidden">
+
+        <div style="display: flex; align-items: center; gap: 14px; padding: 20px 32px; border-bottom: 1px solid #18181b">
+          <div class="btn" onClick="{{nav.home.go}}" style="display: flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: 8px">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#a1a1aa" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M15 5l-7 7 7 7"></path>
+            </svg>
+          </div>
+          <div style="display: flex; flex-direction: column; gap: 3px; flex-grow: 1">
+            <span style="font-size: 18px; font-weight: 600">{{current.name}}</span>
+            <span style="font-size: 12px; color: #71717a">Профиль подключения</span>
+          </div>
+          <div class="btn" style="display: flex; align-items: center; height: 36px; padding: 0 16px; border-radius: 8px; background: #18181b; border: 1px solid #27272a">
+            <span style="font-size: 13px">Поделиться</span>
+          </div>
+          <div class="btn" onClick="{{nav.home.go}}" style="display: flex; align-items: center; height: 36px; padding: 0 18px; border-radius: 8px; background: #059669">
+            <span style="font-size: 13px; font-weight: 500; color: #ecfdf5">Сохранить</span>
+          </div>
+        </div>
+
+        <div style="flex-grow: 1; display: flex; flex-direction: column; gap: 14px; padding: 22px 32px; overflow: hidden">
+
+          <div style="display: flex; flex-direction: column; gap: 16px; padding: 22px 24px; border-radius: 16px; background: #131316; border: 1px solid #27272a">
+            <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px">
+              <div style="display: flex; flex-direction: column; gap: 7px">
+                <span style="font-size: 12px; color: #a1a1aa">Адрес сервера</span>
+                <div style="display: flex; align-items: center; height: 42px; padding: 0 14px; border-radius: 8px; background: #09090b; border: 1px solid #3f3f46">
+                  <span style="font-size: 14px">{{current.address}}</span>
+                </div>
+              </div>
+              <div style="display: flex; flex-direction: column; gap: 7px">
+                <span style="font-size: 12px; color: #a1a1aa">Ссылка на звонок VK Calls</span>
+                <div style="display: flex; align-items: center; height: 42px; padding: 0 14px; border-radius: 8px; background: #09090b; border: 1px solid #3f3f46">
+                  <span style="font-size: 14px; color: #e4e4e7">vk.ru/call/join/9xzCoCyZYxbXlT3Z…</span>
+                </div>
+              </div>
+            </div>
+
+            <div style="display: flex; flex-direction: column; gap: 8px">
+              <span style="font-size: 12px; color: #a1a1aa">Режим работы</span>
+              <div style="display: flex; gap: 10px">
+                <div class="row" onClick="{{setVpn}}" style="flex-grow: 1; display: flex; align-items: center; gap: 12px; padding: 14px 16px; border-radius: 12px; background: {{modeVpn.bg}}; border: 1px solid {{modeVpn.border}}">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="{{modeVpn.icon}}" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M12 3 4 6v6c0 4.5 3.2 7.9 8 9 4.8-1.1 8-4.5 8-9V6z"></path>
+                  </svg>
+                  <div style="display: flex; flex-direction: column; gap: 2px">
+                    <span style="font-size: 14px; font-weight: 500; color: {{modeVpn.title}}">VPN — весь трафик</span>
+                    <span style="font-size: 12px; color: #71717a">Туннель поднимает само приложение</span>
+                  </div>
+                </div>
+                <div class="row" onClick="{{setProxy}}" style="flex-grow: 1; display: flex; align-items: center; gap: 12px; padding: 14px 16px; border-radius: 12px; background: {{modeProxy.bg}}; border: 1px solid {{modeProxy.border}}">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="{{modeProxy.icon}}" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M4 12h16M14 6l6 6-6 6"></path>
+                  </svg>
+                  <div style="display: flex; flex-direction: column; gap: 2px">
+                    <span style="font-size: 14px; font-weight: 500; color: {{modeProxy.title}}">Прокси — локальный порт</span>
+                    <span style="font-size: 12px; color: #71717a">Для Xray, sing-box или своего клиента</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div style="display: flex; align-items: center; gap: 12px; padding: 14px 16px; border-radius: 12px; background: #0f1a15; border: 1px solid #14532d">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M4 12.5 9.5 18 20 6.5"></path>
+              </svg>
+              <div style="display: flex; flex-direction: column; gap: 2px; flex-grow: 1">
+                <span style="font-size: 13px">Конфигурация WireGuard получена с сервера</span>
+                <span style="font-size: 12px; color: #71717a">Адрес 10.13.13.3 · ключи выдал сервер</span>
+              </div>
+              <span style="font-size: 12px; color: #a1a1aa; text-decoration: underline">Запросить заново</span>
+            </div>
+          </div>
+
+          <div class="row" onClick="{{toggleAdvanced}}" style="display: flex; align-items: center; gap: 12px; padding: 16px 20px; border-radius: 12px; background: #131316; border: 1px solid #27272a">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#a1a1aa" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="transform: {{advancedArrow}}">
+              <path d="M6 9l6 6 6-6"></path>
+            </svg>
+            <span style="font-size: 14px; font-weight: 500; flex-grow: 1">Дополнительно</span>
+            <span style="font-size: 12px; color: #71717a">транспорт, потоки, DNS, KCP, раздельное туннелирование</span>
+          </div>
+
+          <sc-if value="{{advanced}}" hint-placeholder-val="{{ true }}">
+            <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px">
+              <div style="display: flex; flex-direction: column; gap: 10px; padding: 18px 20px; border-radius: 16px; background: #131316; border: 1px solid #27272a">
+                <span style="font-size: 12px; font-weight: 600; color: #a1a1aa; letter-spacing: 0.04em; text-transform: uppercase">Обфускация</span>
+                <div style="display: flex; align-items: center; justify-content: space-between">
+                  <span style="font-size: 13px; color: #d4d4d8">Профиль</span>
+                  <span style="font-size: 13px">rtpopus</span>
+                </div>
+                <div style="display: flex; align-items: center; justify-content: space-between">
+                  <span style="font-size: 13px; color: #d4d4d8">Ключ</span>
+                  <span style="font-size: 13px; color: #71717a">совпадает с сервером</span>
+                </div>
+              </div>
+              <div style="display: flex; flex-direction: column; gap: 10px; padding: 18px 20px; border-radius: 16px; background: #131316; border: 1px solid #27272a">
+                <span style="font-size: 12px; font-weight: 600; color: #a1a1aa; letter-spacing: 0.04em; text-transform: uppercase">Раздельное туннелирование</span>
+                <div style="display: flex; align-items: center; justify-content: space-between">
+                  <span style="font-size: 13px; color: #d4d4d8">Режим</span>
+                  <span style="font-size: 13px">весь трафик</span>
+                </div>
+                <span style="font-size: 12px; color: #71717a">На Windows делится по подсетям</span>
+              </div>
+              <div style="display: flex; flex-direction: column; gap: 10px; padding: 18px 20px; border-radius: 16px; background: #131316; border: 1px solid #27272a">
+                <span style="font-size: 12px; font-weight: 600; color: #a1a1aa; letter-spacing: 0.04em; text-transform: uppercase">Потоки TURN</span>
+                <div style="display: flex; align-items: center; justify-content: space-between">
+                  <span style="font-size: 13px; color: #d4d4d8">Параллельно</span>
+                  <span style="font-size: 13px">12</span>
+                </div>
+                <span style="font-size: 12px; color: #71717a">Больше потоков — выше риск бана</span>
+              </div>
+            </div>
+          </sc-if>
+        </div>
+      </div>
+    </sc-if>
+
+    <!-- СЕРВЕР -->
+    <sc-if value="{{screen.server}}" hint-placeholder-val="{{ true }}">
+      <div style="flex-grow: 1; display: flex; flex-direction: column; overflow: hidden">
+
+        <div style="display: flex; align-items: center; gap: 16px; padding: 24px 32px 18px; border-bottom: 1px solid #18181b">
+          <div style="display: flex; flex-direction: column; gap: 4px; flex-grow: 1">
+            <span style="font-size: 20px; font-weight: 600">Сервер {{current.name}}</span>
+            <span style="font-size: 13px; color: #71717a">{{current.host}} · ядро v3.4.0 работает · systemd</span>
+          </div>
+          <div class="btn" onClick="{{probe}}" style="display: flex; align-items: center; gap: 8px; height: 36px; padding: 0 16px; border-radius: 8px; background: #18181b; border: 1px solid #27272a">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#a1a1aa" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 12a9 9 0 1 1-3-6.7"></path><path d="M21 4v5h-5"></path>
+            </svg>
+            <span style="font-size: 13px">{{probeLabel}}</span>
+          </div>
+        </div>
+
+        <div style="flex-grow: 1; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; padding: 20px 32px 24px; overflow: hidden">
+
+          <div style="display: flex; flex-direction: column; gap: 12px; padding: 20px; border-radius: 16px; background: #131316; border: 1px solid #27272a">
+            <span style="font-size: 13px; font-weight: 600; color: #a1a1aa; letter-spacing: 0.04em; text-transform: uppercase">Настройка</span>
+            <sc-for list="{{steps}}" as="s" hint-placeholder-count="4">
+              <div style="display: flex; align-items: flex-start; gap: 12px; padding: 12px 14px; border-radius: 12px; background: {{s.bg}}; border: 1px solid {{s.border}}">
+                <span style="width: 22px; height: 22px; border-radius: 999px; background: {{s.markBg}}; border: 2px solid {{s.markBorder}}; display: flex; align-items: center; justify-content: center; flex-shrink: 0">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="{{s.check}}" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.5 9.5 18 20 6.5"></path></svg>
+                </span>
+                <div style="display: flex; flex-direction: column; gap: 2px">
+                  <span style="font-size: 14px; font-weight: 500">{{s.title}}</span>
+                  <span style="font-size: 12px; color: #71717a">{{s.hint}}</span>
+                </div>
+              </div>
+            </sc-for>
+          </div>
+
+          <div style="display: flex; flex-direction: column; gap: 16px; overflow: hidden">
+            <div style="display: flex; flex-direction: column; gap: 10px; padding: 20px; border-radius: 16px; background: #131316; border: 1px solid #27272a">
+              <span style="font-size: 13px; font-weight: 600; color: #a1a1aa; letter-spacing: 0.04em; text-transform: uppercase">Состояние</span>
+              <div style="display: flex; align-items: center; gap: 10px">
+                <span style="width: 8px; height: 8px; border-radius: 999px; background: #10b981"></span>
+                <span style="font-size: 14px; flex-grow: 1">Серверная часть работает</span>
+                <span style="font-size: 12px; color: #71717a">0.0.0.0:56000 → 127.0.0.1:51471</span>
+              </div>
+            </div>
+
+            <div style="display: flex; align-items: flex-start; gap: 10px; padding: 14px 16px; border-radius: 12px; background: #1c1917; border: 1px solid #422006">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="1.8" stroke-linecap="round" style="flex-shrink: 0; margin-top: 1px">
+                <path d="M12 9v4M12 17h.01"></path>
+                <path d="M10.3 3.9 2.6 17.2A1.9 1.9 0 0 0 4.3 20h15.4a1.9 1.9 0 0 0 1.7-2.8L13.7 3.9a1.9 1.9 0 0 0-3.4 0z"></path>
+              </svg>
+              <div style="display: flex; flex-direction: column; gap: 2px">
+                <span style="font-size: 13px; color: #fcd34d">На сервере найдена панель 3x-ui</span>
+                <span style="font-size: 12px; color: #a1a1aa">Может занимать порты — если появятся странности, начните с неё</span>
+              </div>
+            </div>
+
+            <div style="flex-grow: 1; display: flex; flex-direction: column; gap: 10px; padding: 16px 18px; border-radius: 16px; background: #0c0c0e; border: 1px solid #27272a; overflow: hidden">
+              <span style="font-size: 13px; font-weight: 600; color: #a1a1aa; letter-spacing: 0.04em; text-transform: uppercase">Ход выполнения</span>
+              <div style="display: flex; flex-direction: column; gap: 5px; font-family: ui-monospace, 'Cascadia Mono', Consolas, monospace; font-size: 11.5px; line-height: 1.5">
+                <sc-for list="{{serverLog}}" as="line" hint-placeholder-count="4">
+                  <span style="color: {{line.color}}">{{line.text}}</span>
+                </sc-for>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </sc-if>
+
+    <!-- ЖУРНАЛ -->
+    <sc-if value="{{screen.logs}}" hint-placeholder-val="{{ true }}">
+      <div style="flex-grow: 1; display: flex; flex-direction: column; gap: 14px; padding: 24px 32px; overflow: hidden">
+        <div style="display: flex; align-items: center; gap: 10px">
+          <span style="font-size: 20px; font-weight: 600; flex-grow: 1">Журнал ядра</span>
+          <sc-for list="{{filters}}" as="f" hint-placeholder-count="4">
+            <div class="btn" onClick="{{f.pick}}" style="display: flex; align-items: center; height: 32px; padding: 0 14px; border-radius: 8px; background: {{f.bg}}; border: 1px solid {{f.border}}">
+              <span style="font-size: 13px; color: {{f.color}}">{{f.label}}</span>
+            </div>
+          </sc-for>
+        </div>
+
+        <div style="flex-grow: 1; display: flex; flex-direction: column; gap: 5px; padding: 18px 20px; border-radius: 16px; background: #0c0c0e; border: 1px solid #27272a; font-family: ui-monospace, 'Cascadia Mono', Consolas, monospace; font-size: 12px; line-height: 1.6; overflow: hidden">
+          <sc-for list="{{coreLog}}" as="line" hint-placeholder-count="8">
+            <div style="display: flex; gap: 12px">
+              <span style="color: #52525b">{{line.time}}</span>
+              <span style="color: {{line.color}}">{{line.text}}</span>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+    </sc-if>
+
+    <!-- НАСТРОЙКИ -->
+    <sc-if value="{{screen.settings}}" hint-placeholder-val="{{ true }}">
+      <div style="flex-grow: 1; display: flex; flex-direction: column; overflow: hidden">
+        <div style="padding: 24px 32px 14px">
+          <span style="font-size: 20px; font-weight: 600">Настройки</span>
+        </div>
+
+        <div style="flex-grow: 1; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; padding: 6px 32px 24px; align-content: start; overflow: hidden">
+
+          <div style="display: flex; flex-direction: column; padding: 6px 4px 8px; border-radius: 16px; background: #131316; border: 1px solid #27272a">
+            <span style="font-size: 12px; font-weight: 600; color: #71717a; letter-spacing: 0.04em; text-transform: uppercase; padding: 12px 18px 8px">Приложение</span>
+            <sc-for list="{{toggles}}" as="t" hint-placeholder-count="3">
+              <div class="row" onClick="{{t.flip}}" style="display: flex; align-items: center; gap: 14px; padding: 12px 18px">
+                <div style="display: flex; flex-direction: column; gap: 2px; flex-grow: 1">
+                  <span style="font-size: 14px">{{t.title}}</span>
+                  <span style="font-size: 12px; color: #71717a">{{t.hint}}</span>
+                </div>
+                <div style="width: 44px; height: 26px; border-radius: 999px; background: {{t.trackBg}}; padding: 3px; display: flex; justify-content: {{t.knobSide}}">
+                  <div style="width: 20px; height: 20px; border-radius: 999px; background: {{t.knobBg}}"></div>
+                </div>
+              </div>
+            </sc-for>
+          </div>
+
+          <div style="display: flex; flex-direction: column; padding: 6px 4px 8px; border-radius: 16px; background: #131316; border: 1px solid #27272a">
+            <span style="font-size: 12px; font-weight: 600; color: #71717a; letter-spacing: 0.04em; text-transform: uppercase; padding: 12px 18px 8px">Ядро</span>
+            <div style="display: flex; align-items: center; gap: 14px; padding: 12px 18px">
+              <div style="display: flex; flex-direction: column; gap: 2px; flex-grow: 1">
+                <span style="font-size: 14px">Версия</span>
+                <span style="font-size: 12px; color: #71717a">Обновлено сегодня · проверка каждые 6 часов</span>
+              </div>
+              <span style="font-size: 13px; color: #34d399">v3.4.0</span>
+            </div>
+            <div style="display: flex; align-items: center; gap: 14px; padding: 12px 18px">
+              <div style="display: flex; flex-direction: column; gap: 2px; flex-grow: 1">
+                <span style="font-size: 14px">Резервная копия</span>
+                <span style="font-size: 12px; color: #71717a">Формат совместим с Android-клиентом</span>
+              </div>
+              <div style="display: flex; align-items: center; gap: 8px">
+                <div class="btn" style="display: flex; align-items: center; height: 32px; padding: 0 14px; border-radius: 8px; background: #18181b; border: 1px solid #27272a">
+                  <span style="font-size: 13px; color: #d4d4d8">Экспорт</span>
+                </div>
+                <div class="btn" style="display: flex; align-items: center; height: 32px; padding: 0 14px; border-radius: 8px; background: #18181b; border: 1px solid #27272a">
+                  <span style="font-size: 13px; color: #d4d4d8">Импорт</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </sc-if>
+
+  </div>
+</div>
+</x-dc>
+
+<script data-dc-script data-props='{"$preview":{"width":1100,"height":760},"profileCount":{"editor":"range","default":9,"min":1,"max":14,"section":"Данные"}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = {
+      screen: 'home',
+      connected: true,
+      activeId: 'nl01',
+      query: '',
+      sheetExpanded: false,
+      advanced: false,
+      vpnMode: true,
+      probed: true,
+      filter: 'all',
+      minimizeToTray: true,
+      autostart: false,
+      autoconnect: false,
+    };
+  }
+
+  go(screen) {
+    return () => this.setState({ screen });
+  }
+
+  navItem(id) {
+    const active = this.state.screen === id;
+    return {
+      bg: active ? '#18181b' : 'transparent',
+      color: active ? '#10b981' : '#a1a1aa',
+      go: this.go(id),
+    };
+  }
+
+  renderVals() {
+    const s = this.state;
+    // Список специально длинный: столько профилей заводят, когда пользуются
+    // подпиской, и именно на этом объёме проверяется главный экран.
+    const all = [
+      { id: 'nl01', name: 'vdsina NL01', host: '203.0.113.10', address: '203.0.113.10:56000', obf: 'rtpopus', sub: false },
+      { id: 'fi', name: 'Резерв FI', host: '95.216.44.10', address: '95.216.44.10:56000', obf: 'rtpopus3', sub: false },
+      { id: 'de1', name: 'Hetzner DE-1', host: '116.203.44.8', address: '116.203.44.8:56000', obf: 'rtpopus3', sub: true },
+      { id: 'nl2', name: 'Amsterdam NL-2', host: '5.75.129.44', address: '5.75.129.44:56000', obf: 'rtpopus3', sub: true },
+      { id: 'pl', name: 'Warszawa PL-1', host: '46.101.88.19', address: '46.101.88.19:56000', obf: 'rtpopus2', sub: true },
+      { id: 'se', name: 'Stockholm SE-1', host: '13.51.7.204', address: '13.51.7.204:56000', obf: 'rtpopus3', sub: true },
+      { id: 'tr', name: 'Istanbul TR-1', host: '188.132.222.7', address: '188.132.222.7:56000', obf: 'rtpopus', sub: true },
+      { id: 'kz', name: 'Almaty KZ-1', host: '92.46.61.140', address: '92.46.61.140:56000', obf: 'rtpopus3', sub: true },
+      { id: 'am', name: 'Yerevan AM-1', host: '176.104.53.9', address: '176.104.53.9:56000', obf: 'rtpopus3', sub: true },
+      { id: 'ge', name: 'Tbilisi GE-1', host: '95.104.211.6', address: '95.104.211.6:56000', obf: 'rtpopus2', sub: true },
+      { id: 'lv', name: 'Riga LV-1', host: '85.234.107.3', address: '85.234.107.3:56000', obf: 'rtpopus3', sub: true },
+      { id: 'us', name: 'New York US-1', host: '159.89.44.201', address: '159.89.44.201:56000', obf: 'rtpopus3', sub: true },
+      { id: 'jp', name: 'Tokyo JP-1', host: '133.242.9.14', address: '133.242.9.14:56000', obf: 'rtpopus3', sub: true },
+      { id: 'sg', name: 'Singapore SG-1', host: '128.199.98.7', address: '128.199.98.7:56000', obf: 'rtpopus2', sub: true },
+    ];
+
+    const count = Math.max(1, Math.min(all.length, this.props.profileCount ?? 9));
+    const servers = all.slice(0, count);
+    const current = servers.find((x) => x.id === s.activeId) || servers[0];
+
+    const query = s.query.trim().toLowerCase();
+    const matches = (x) => !query
+      || x.name.toLowerCase().includes(query)
+      || x.address.toLowerCase().includes(query);
+    // Активный профиль всегда первым: до него не должно быть прокрутки.
+    const visible = servers
+      .filter(matches)
+      .sort((a, b) => (a.id === current.id ? -1 : b.id === current.id ? 1 : 0));
+
+    // Профили: активный подсвечен рамкой, точка горит только когда подключено.
+    const profiles = visible.map((x) => {
+      const isActive = x.id === s.activeId;
+      const live = isActive && s.connected;
+      const vpn = isActive ? s.vpnMode : false;
+      return {
+        ...x,
+        address: x.sub ? x.address + ' · из подписки' : x.address,
+        border: isActive ? '#10b981' : '#27272a',
+        dot: live ? '#10b981' : isActive ? '#52525b' : '#3f3f46',
+        mode: vpn ? 'VPN' : 'прокси',
+        modeBg: vpn ? '#064e3b' : '#27272a',
+        modeColor: vpn ? '#d1fae5' : '#a1a1aa',
+        pick: () => this.setState({ activeId: x.id }),
+        open: () => this.setState({ activeId: x.id, screen: 'profile' }),
+      };
+    });
+
+    const done = (title, hint) => ({
+      title, hint,
+      bg: '#0f1a15', border: '#14532d',
+      markBg: '#10b981', markBorder: '#10b981', check: '#052e24',
+    });
+    const todo = (title, hint) => ({
+      title, hint,
+      bg: '#18181b', border: '#27272a',
+      markBg: 'transparent', markBorder: '#3f3f46', check: 'transparent',
+    });
+
+    const filters = [
+      { id: 'all', label: 'Все' },
+      { id: 'info', label: 'Инфо' },
+      { id: 'warn', label: 'Предупреждения' },
+      { id: 'error', label: 'Ошибки' },
+    ].map((f) => ({
+      ...f,
+      bg: s.filter === f.id ? '#18181b' : 'transparent',
+      border: s.filter === f.id ? '#3f3f46' : '#27272a',
+      color: s.filter === f.id ? '#fafafa' : '#a1a1aa',
+      pick: () => this.setState({ filter: f.id }),
+    }));
+
+    const lines = [
+      { time: '20:29:20', text: 'Free Turn Proxy client version=3.4.0', level: 'info' },
+      { time: '20:29:20', text: '[DNS] using custom UDP servers: [192.168.31.1]', level: 'info' },
+      { time: '20:29:23', text: '[STREAM 1] [Captcha] solver succeeded', level: 'info' },
+      { time: '20:29:28', text: 'Ensuring route to 91.231.135.143/32 via 192.168.31.1', level: 'info' },
+      { time: '20:29:28', text: '[STREAM 1] TURN allocation up: relayed=91.231.135.143', level: 'info' },
+      { time: '20:29:31', text: 'мимо туннеля пущены адреса: 87.240.129.133, …', level: 'warn' },
+      { time: '20:29:31', text: 'Туннель поднят: адаптер freeturn-wg, DNS 1.1.1.1', level: 'ok' },
+      { time: '20:29:32', text: 'peer(HEsq…OWmo) - Received handshake response', level: 'ok' },
+    ];
+    const levelColor = { info: '#d4d4d8', warn: '#fbbf24', error: '#f87171', ok: '#34d399' };
+    const coreLog = lines
+      .filter((l) => s.filter === 'all'
+        || (s.filter === 'error' && l.level === 'error')
+        || (s.filter === 'warn' && (l.level === 'warn' || l.level === 'error'))
+        || (s.filter === 'info' && l.level !== 'debug'))
+      .map((l) => ({ ...l, color: levelColor[l.level] }));
+
+    const toggle = (key, title, hint) => {
+      const on = s[key];
+      return {
+        title, hint,
+        trackBg: on ? '#059669' : '#3f3f46',
+        knobBg: on ? '#ecfdf5' : '#a1a1aa',
+        knobSide: on ? 'flex-end' : 'flex-start',
+        flip: () => this.setState({ [key]: !on }),
+      };
+    };
+
+    const plural = (n) => {
+      const tail = n % 100 >= 11 && n % 100 <= 14 ? 5 : n % 10;
+      if (tail === 1) return n + ' профиль';
+      if (tail >= 2 && tail <= 4) return n + ' профиля';
+      return n + ' профилей';
+    };
+
+    return {
+      connected: s.connected,
+      advanced: s.advanced,
+
+      // Поиск нужен, только когда список перестаёт читаться взглядом.
+      searchVisible: servers.length > 5,
+      query: s.query,
+      onQuery: (e) => this.setState({ query: e.target.value }),
+      listCount: query ? 'показано ' + visible.length + ' из ' + servers.length : plural(servers.length),
+      nothingFound: visible.length === 0,
+
+      // Развёрнутый список занимает место героя - как поднятый лист в Android.
+      heroVisible: !s.sheetExpanded,
+      compactVisible: s.sheetExpanded,
+      warningVisible: s.connected && !s.sheetExpanded,
+      sheetExpanded: s.sheetExpanded,
+      sheetArrow: s.sheetExpanded ? 'rotate(180deg)' : 'rotate(0deg)',
+      sheetLabel: s.sheetExpanded ? 'Свернуть' : 'Развернуть',
+      toggleSheet: () => this.setState({ sheetExpanded: !s.sheetExpanded }),
+
+      current,
+      profiles,
+      filters,
+      coreLog,
+
+      screen: {
+        home: s.screen === 'home',
+        server: s.screen === 'server',
+        profile: s.screen === 'profile',
+        logs: s.screen === 'logs',
+        settings: s.screen === 'settings',
+      },
+      nav: {
+        home: this.navItem('home'),
+        server: this.navItem('server'),
+        logs: this.navItem('logs'),
+        settings: this.navItem('settings'),
+      },
+      mark: { color: s.connected ? '#10b981' : '#3f3f46' },
+
+      hero: s.connected
+        ? {
+            bg: 'radial-gradient(circle at 50% 42%, #064e3b 0%, #052e24 55%, #04231d 100%)',
+            border: '#10b981',
+            shadow: '0 0 0 12px rgba(16, 185, 129, 0.08), 0 18px 48px rgba(16, 185, 129, 0.18)',
+            icon: '#34d399', label: '#d1fae5', action: 'Отключить',
+          }
+        : {
+            bg: '#131316', border: '#27272a', shadow: 'none',
+            icon: '#71717a', label: '#d4d4d8', action: 'Подключить',
+          },
+      status: s.connected
+        ? { dot: '#10b981', color: '#fafafa', title: 'Подключено', hint: current.name + ' · туннель поднят' }
+        : { dot: '#52525b', color: '#d4d4d8', title: 'Отключено', hint: 'Готово к подключению · ' + current.name },
+      toggle: () => this.setState({ connected: !s.connected }),
+
+      modeVpn: s.vpnMode
+        ? { bg: '#0f1a15', border: '#10b981', icon: '#10b981', title: '#fafafa' }
+        : { bg: '#18181b', border: '#27272a', icon: '#71717a', title: '#d4d4d8' },
+      modeProxy: s.vpnMode
+        ? { bg: '#18181b', border: '#27272a', icon: '#71717a', title: '#d4d4d8' }
+        : { bg: '#0f1a15', border: '#10b981', icon: '#10b981', title: '#fafafa' },
+      setVpn: () => this.setState({ vpnMode: true }),
+      setProxy: () => this.setState({ vpnMode: false }),
+
+      toggleAdvanced: () => this.setState({ advanced: !s.advanced }),
+      advancedArrow: s.advanced ? 'rotate(180deg)' : 'rotate(0deg)',
+
+      probe: () => this.setState({ probed: true }),
+      probeLabel: s.probed ? 'Проверить' : 'Опрашиваю…',
+      steps: [
+        done('Доступ по SSH подтверждён', 'admin@' + current.host + ' · sudo с паролем'),
+        done('Ядро установлено', 'v3.4.0 — та же версия, что у клиента'),
+        done('WireGuard настроен', 'порт 51471, модуль ядра · конфигурация в профиле'),
+        todo('Пригласить гостя', 'Сервер заведёт пира и отдаст готовую ссылку'),
+      ],
+      serverLog: [
+        { text: '$ install.sh probe', color: '#71717a' },
+        { text: 'ядро v3.4.0, systemd, WireGuard 51471', color: '#a1a1aa' },
+        { text: '$ install.sh wg-setup --port=51471', color: '#71717a' },
+        { text: 'клиент добавлен, адрес 10.13.13.3', color: '#34d399' },
+      ],
+
+      toggles: [
+        toggle('minimizeToTray', 'Сворачивать в трей', 'Крестик прячет окно, ядро продолжает работать'),
+        toggle('autostart', 'Запускать при входе в систему', 'Задача планировщика с правами администратора'),
+        toggle('autoconnect', 'Подключать последний профиль', 'Сразу после запуска приложения'),
+      ],
+    };
+  }
+}
+</script>
+</body>
+</html>

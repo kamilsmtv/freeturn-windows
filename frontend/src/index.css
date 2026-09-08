@@ -1,0 +1,83 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light dark;
+}
+
+body {
+  @apply bg-zinc-100 text-zinc-900 antialiased;
+  user-select: none;
+}
+
+.dark body {
+  @apply bg-zinc-950 text-zinc-100;
+}
+
+/* Поля ввода и лог - единственные места, где текст выделяется мышью. */
+input,
+textarea,
+.selectable {
+  user-select: text;
+}
+
+/* Системная полоса прокрутки выбивается из интерфейса: делаем её тонкой,
+   без дорожки и с зарезервированным местом - иначе содержимое дёргается,
+   когда она появляется. */
+.scroll {
+  scrollbar-width: thin;
+  scrollbar-color: #d4d4d8 transparent;
+  scrollbar-gutter: stable;
+}
+
+.dark .scroll {
+  scrollbar-color: #2f2f33 transparent;
+}
+
+.scroll::-webkit-scrollbar {
+  width: 10px;
+}
+
+.scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.scroll::-webkit-scrollbar-thumb {
+  background: #d4d4d8;
+  border-radius: 999px;
+  border: 3px solid transparent;
+  background-clip: content-box;
+}
+
+.dark .scroll::-webkit-scrollbar-thumb {
+  background: #2f2f33;
+  background-clip: content-box;
+}
+
+.scroll:hover::-webkit-scrollbar-thumb {
+  background: #a1a1aa;
+  background-clip: content-box;
+}
+
+.dark .scroll:hover::-webkit-scrollbar-thumb {
+  background: #4b4b52;
+  background-clip: content-box;
+}
+
+/* Главная кнопка. В подключённом состоянии макет даёт зелёное свечение и
+   радиальную заливку - обычными утилитами это не выражается. */
+.hero-live {
+  background: radial-gradient(circle at 50% 42%, #d1fae5 0%, #a7f3d0 55%, #86efac 100%);
+  border-color: #10b981;
+  box-shadow: 0 0 0 12px rgba(16, 185, 129, 0.08), 0 18px 48px rgba(16, 185, 129, 0.18);
+}
+
+.dark .hero-live {
+  background: radial-gradient(circle at 50% 42%, #064e3b 0%, #052e24 55%, #04231d 100%);
+}
+
+/* Список профилей растворяется у нижнего края, как в макете. */
+.fade-bottom {
+  mask-image: linear-gradient(to bottom, #000 0, #000 calc(100% - 20px), transparent 100%);
+}

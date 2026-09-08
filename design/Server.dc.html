@@ -1,0 +1,174 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin: 0; font-family: system-ui, "Segoe UI", sans-serif; }
+    a { color: #34d399; text-decoration: none; }
+    a:hover { color: #6ee7b7; }
+  </style>
+</helmet>
+
+<div style="width: 1100px; height: 760px; display: flex; background: #09090b; color: #fafafa; overflow: hidden">
+
+  <div style="width: 88px; flex-shrink: 0; display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 16px 0; background: #0c0c0e; border-right: 1px solid #27272a">
+    <div style="width: 36px; height: 36px; border-radius: 999px; border: 5px solid #10b981; background: #18181b; display: flex; align-items: center; justify-content: center; margin-bottom: 20px">
+      <div style="width: 10px; height: 10px; border-radius: 999px; background: #10b981"></div>
+    </div>
+    <div style="display: flex; flex-direction: column; align-items: center; gap: 6px; width: 72px; padding: 10px 0; border-radius: 12px">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#a1a1aa" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M12 3 3 10v10a1 1 0 0 0 1 1h5v-7h6v7h5a1 1 0 0 0 1-1V10z"></path>
+      </svg>
+      <span style="font-size: 11px; color: #a1a1aa">Главная</span>
+    </div>
+    <div style="display: flex; flex-direction: column; align-items: center; gap: 6px; width: 72px; padding: 10px 0; border-radius: 12px; background: #18181b">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="3" y="4" width="18" height="7" rx="2"></rect>
+        <rect x="3" y="13" width="18" height="7" rx="2"></rect>
+        <path d="M7 7.5h.01M7 16.5h.01"></path>
+      </svg>
+      <span style="font-size: 11px; color: #10b981">Сервер</span>
+    </div>
+    <div style="display: flex; flex-direction: column; align-items: center; gap: 6px; width: 72px; padding: 10px 0; border-radius: 12px">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#a1a1aa" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M4 5h16M4 10h16M4 15h10M4 20h7"></path>
+      </svg>
+      <span style="font-size: 11px; color: #a1a1aa">Журнал</span>
+    </div>
+    <div style="display: flex; flex-direction: column; align-items: center; gap: 6px; width: 72px; padding: 10px 0; border-radius: 12px">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#a1a1aa" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="3.2"></circle>
+        <path d="M12 3v2.5M12 18.5V21M21 12h-2.5M5.5 12H3M18.4 5.6l-1.8 1.8M7.4 16.6l-1.8 1.8M18.4 18.4l-1.8-1.8M7.4 7.4 5.6 5.6"></path>
+      </svg>
+      <span style="font-size: 11px; color: #a1a1aa">Настройки</span>
+    </div>
+  </div>
+
+  <div style="flex-grow: 1; display: flex; flex-direction: column; overflow: hidden">
+
+    <div style="display: flex; align-items: center; gap: 16px; padding: 24px 32px 18px; border-bottom: 1px solid #18181b">
+      <div style="display: flex; flex-direction: column; gap: 4px; flex-grow: 1">
+        <span style="font-size: 20px; font-weight: 600">Сервер vdsina NL01</span>
+        <span style="font-size: 13px; color: #71717a">203.0.113.10 · ядро v3.4.0 работает · systemd</span>
+      </div>
+      <div style="display: flex; align-items: center; gap: 8px; height: 36px; padding: 0 16px; border-radius: 8px; background: #18181b; border: 1px solid #27272a">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#a1a1aa" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 12a9 9 0 1 1-3-6.7"></path><path d="M21 4v5h-5"></path>
+        </svg>
+        <span style="font-size: 13px">Проверить</span>
+      </div>
+      <div style="display: flex; align-items: center; gap: 8px; height: 36px; padding: 0 16px; border-radius: 8px; background: #18181b; border: 1px solid #27272a">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#a1a1aa" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M4 6h16M4 12h16M4 18h10"></path>
+        </svg>
+        <span style="font-size: 13px">Журнал сервера</span>
+      </div>
+    </div>
+
+    <div style="flex-grow: 1; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; padding: 20px 32px 24px; overflow: hidden">
+
+      <!-- Шаги вместо плотной формы: то же, что мастер установки в Android -->
+      <div style="display: flex; flex-direction: column; gap: 12px; padding: 20px; border-radius: 16px; background: #131316; border: 1px solid #27272a">
+        <span style="font-size: 13px; font-weight: 600; color: #a1a1aa; letter-spacing: 0.04em; text-transform: uppercase">Настройка</span>
+
+        <div style="display: flex; align-items: flex-start; gap: 12px; padding: 12px 14px; border-radius: 12px; background: #0f1a15; border: 1px solid #14532d">
+          <span style="width: 22px; height: 22px; border-radius: 999px; background: #10b981; display: flex; align-items: center; justify-content: center; flex-shrink: 0">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#052e24" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.5 9.5 18 20 6.5"></path></svg>
+          </span>
+          <div style="display: flex; flex-direction: column; gap: 2px">
+            <span style="font-size: 14px; font-weight: 500">Доступ по SSH подтверждён</span>
+            <span style="font-size: 12px; color: #71717a">admin@203.0.113.10:22 · sudo с паролем</span>
+          </div>
+        </div>
+
+        <div style="display: flex; align-items: flex-start; gap: 12px; padding: 12px 14px; border-radius: 12px; background: #0f1a15; border: 1px solid #14532d">
+          <span style="width: 22px; height: 22px; border-radius: 999px; background: #10b981; display: flex; align-items: center; justify-content: center; flex-shrink: 0">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#052e24" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.5 9.5 18 20 6.5"></path></svg>
+          </span>
+          <div style="display: flex; flex-direction: column; gap: 2px">
+            <span style="font-size: 14px; font-weight: 500">Ядро установлено</span>
+            <span style="font-size: 12px; color: #71717a">v3.4.0 — та же версия, что у клиента</span>
+          </div>
+        </div>
+
+        <div style="display: flex; align-items: flex-start; gap: 12px; padding: 12px 14px; border-radius: 12px; background: #0f1a15; border: 1px solid #14532d">
+          <span style="width: 22px; height: 22px; border-radius: 999px; background: #10b981; display: flex; align-items: center; justify-content: center; flex-shrink: 0">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#052e24" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.5 9.5 18 20 6.5"></path></svg>
+          </span>
+          <div style="display: flex; flex-direction: column; gap: 2px">
+            <span style="font-size: 14px; font-weight: 500">WireGuard настроен</span>
+            <span style="font-size: 12px; color: #71717a">порт 51471, модуль ядра · конфигурация клиента в профиле</span>
+          </div>
+        </div>
+
+        <div style="display: flex; align-items: flex-start; gap: 12px; padding: 12px 14px; border-radius: 12px; background: #18181b; border: 1px solid #27272a">
+          <span style="width: 22px; height: 22px; border-radius: 999px; border: 2px solid #3f3f46; flex-shrink: 0"></span>
+          <div style="display: flex; flex-direction: column; gap: 8px; flex-grow: 1">
+            <div style="display: flex; flex-direction: column; gap: 2px">
+              <span style="font-size: 14px; font-weight: 500">Пригласить гостя</span>
+              <span style="font-size: 12px; color: #71717a">Сервер заведёт пира и отдаст готовую ссылку</span>
+            </div>
+            <div style="display: flex; align-items: center; gap: 8px; height: 36px; padding: 0 16px; border-radius: 8px; background: #059669; align-self: flex-start">
+              <span style="font-size: 13px; font-weight: 500; color: #ecfdf5">Создать ссылку</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div style="display: flex; flex-direction: column; gap: 16px; overflow: hidden">
+
+        <div style="display: flex; flex-direction: column; gap: 10px; padding: 20px; border-radius: 16px; background: #131316; border: 1px solid #27272a">
+          <span style="font-size: 13px; font-weight: 600; color: #a1a1aa; letter-spacing: 0.04em; text-transform: uppercase">Состояние</span>
+          <div style="display: flex; align-items: center; gap: 10px">
+            <span style="width: 8px; height: 8px; border-radius: 999px; background: #10b981"></span>
+            <span style="font-size: 14px; flex-grow: 1">Серверная часть работает</span>
+            <span style="font-size: 12px; color: #71717a">0.0.0.0:56000 → 127.0.0.1:51471</span>
+          </div>
+          <div style="display: flex; align-items: center; gap: 10px; margin-top: 4px">
+            <div style="display: flex; align-items: center; gap: 8px; height: 36px; padding: 0 16px; border-radius: 8px; background: #18181b; border: 1px solid #27272a">
+              <span style="font-size: 13px">Перезапустить</span>
+            </div>
+            <div style="display: flex; align-items: center; gap: 8px; height: 36px; padding: 0 16px; border-radius: 8px; background: #18181b; border: 1px solid #27272a">
+              <span style="font-size: 13px">Остановить</span>
+            </div>
+          </div>
+        </div>
+
+        <div style="display: flex; align-items: flex-start; gap: 10px; padding: 14px 16px; border-radius: 12px; background: #1c1917; border: 1px solid #422006">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="1.8" stroke-linecap="round" style="flex-shrink: 0; margin-top: 1px">
+            <path d="M12 9v4M12 17h.01"></path>
+            <path d="M10.3 3.9 2.6 17.2A1.9 1.9 0 0 0 4.3 20h15.4a1.9 1.9 0 0 0 1.7-2.8L13.7 3.9a1.9 1.9 0 0 0-3.4 0z"></path>
+          </svg>
+          <div style="display: flex; flex-direction: column; gap: 2px">
+            <span style="font-size: 13px; color: #fcd34d">На сервере найдена панель 3x-ui</span>
+            <span style="font-size: 12px; color: #a1a1aa">Может занимать порты и свои интерфейсы — если появятся странности с портами, начните с неё</span>
+          </div>
+        </div>
+
+        <div style="flex-grow: 1; display: flex; flex-direction: column; gap: 10px; padding: 16px 18px; border-radius: 16px; background: #0c0c0e; border: 1px solid #27272a; overflow: hidden">
+          <div style="display: flex; align-items: center; gap: 8px">
+            <span style="font-size: 13px; font-weight: 600; color: #a1a1aa; letter-spacing: 0.04em; text-transform: uppercase; flex-grow: 1">Ход выполнения</span>
+            <span style="font-size: 12px; color: #52525b">install.sh · протокол v2</span>
+          </div>
+          <div style="display: flex; flex-direction: column; gap: 5px; font-family: ui-monospace, 'Cascadia Mono', Consolas, monospace; font-size: 11.5px; line-height: 1.5">
+            <span style="color: #71717a">$ install.sh probe</span>
+            <span style="color: #a1a1aa">ядро v3.4.0, systemd, WireGuard 51471</span>
+            <span style="color: #71717a">$ install.sh wg-setup --port=51471</span>
+            <span style="color: #34d399">клиент добавлен, адрес 10.13.13.3</span>
+            <span style="color: #71717a">$ install.sh start --listen=0.0.0.0:56000</span>
+            <span style="color: #34d399">сервер запущен</span>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

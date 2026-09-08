@@ -1,0 +1,162 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin: 0; font-family: system-ui, "Segoe UI", sans-serif; }
+    a { color: #34d399; text-decoration: none; }
+    a:hover { color: #6ee7b7; }
+  </style>
+</helmet>
+
+<div style="width: 1100px; height: 760px; display: flex; background: #09090b; color: #fafafa; overflow: hidden">
+
+  <div style="width: 88px; flex-shrink: 0; display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 16px 0; background: #0c0c0e; border-right: 1px solid #27272a">
+    <div style="width: 36px; height: 36px; border-radius: 999px; border: 5px solid #10b981; background: #18181b; display: flex; align-items: center; justify-content: center; margin-bottom: 20px">
+      <div style="width: 10px; height: 10px; border-radius: 999px; background: #10b981"></div>
+    </div>
+    <div style="display: flex; flex-direction: column; align-items: center; gap: 6px; width: 72px; padding: 10px 0; border-radius: 12px">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#a1a1aa" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M12 3 3 10v10a1 1 0 0 0 1 1h5v-7h6v7h5a1 1 0 0 0 1-1V10z"></path>
+      </svg>
+      <span style="font-size: 11px; color: #a1a1aa">Главная</span>
+    </div>
+    <div style="display: flex; flex-direction: column; align-items: center; gap: 6px; width: 72px; padding: 10px 0; border-radius: 12px">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#a1a1aa" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="3" y="4" width="18" height="7" rx="2"></rect>
+        <rect x="3" y="13" width="18" height="7" rx="2"></rect>
+        <path d="M7 7.5h.01M7 16.5h.01"></path>
+      </svg>
+      <span style="font-size: 11px; color: #a1a1aa">Сервер</span>
+    </div>
+    <div style="display: flex; flex-direction: column; align-items: center; gap: 6px; width: 72px; padding: 10px 0; border-radius: 12px">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#a1a1aa" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M4 5h16M4 10h16M4 15h10M4 20h7"></path>
+      </svg>
+      <span style="font-size: 11px; color: #a1a1aa">Журнал</span>
+    </div>
+    <div style="display: flex; flex-direction: column; align-items: center; gap: 6px; width: 72px; padding: 10px 0; border-radius: 12px; background: #18181b">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="3.2"></circle>
+        <path d="M12 3v2.5M12 18.5V21M21 12h-2.5M5.5 12H3M18.4 5.6l-1.8 1.8M7.4 16.6l-1.8 1.8M18.4 18.4l-1.8-1.8M7.4 7.4 5.6 5.6"></path>
+      </svg>
+      <span style="font-size: 11px; color: #10b981">Настройки</span>
+    </div>
+  </div>
+
+  <div style="flex-grow: 1; display: flex; flex-direction: column; overflow: hidden">
+
+    <div style="padding: 24px 32px 14px">
+      <span style="font-size: 20px; font-weight: 600">Настройки</span>
+    </div>
+
+    <div style="flex-grow: 1; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; padding: 6px 32px 24px; overflow: hidden; align-content: start">
+
+      <div style="display: flex; flex-direction: column; padding: 6px 4px 8px; border-radius: 16px; background: #131316; border: 1px solid #27272a">
+        <span style="font-size: 12px; font-weight: 600; color: #71717a; letter-spacing: 0.04em; text-transform: uppercase; padding: 12px 18px 8px">Приложение</span>
+
+        <div style="display: flex; align-items: center; gap: 14px; padding: 12px 18px">
+          <div style="display: flex; flex-direction: column; gap: 2px; flex-grow: 1">
+            <span style="font-size: 14px">Тема</span>
+            <span style="font-size: 12px; color: #71717a">Следует за темой Windows</span>
+          </div>
+          <span style="font-size: 13px; color: #a1a1aa">Системная</span>
+        </div>
+
+        <div style="display: flex; align-items: center; gap: 14px; padding: 12px 18px">
+          <div style="display: flex; flex-direction: column; gap: 2px; flex-grow: 1">
+            <span style="font-size: 14px">Сворачивать в трей</span>
+            <span style="font-size: 12px; color: #71717a">Крестик прячет окно, ядро продолжает работать</span>
+          </div>
+          <div style="width: 44px; height: 26px; border-radius: 999px; background: #059669; padding: 3px; display: flex; justify-content: flex-end">
+            <div style="width: 20px; height: 20px; border-radius: 999px; background: #ecfdf5"></div>
+          </div>
+        </div>
+
+        <div style="display: flex; align-items: center; gap: 14px; padding: 12px 18px">
+          <div style="display: flex; flex-direction: column; gap: 2px; flex-grow: 1">
+            <span style="font-size: 14px">Запускать при входе в систему</span>
+            <span style="font-size: 12px; color: #71717a">Задача планировщика с правами администратора</span>
+          </div>
+          <div style="width: 44px; height: 26px; border-radius: 999px; background: #3f3f46; padding: 3px; display: flex; justify-content: flex-start">
+            <div style="width: 20px; height: 20px; border-radius: 999px; background: #a1a1aa"></div>
+          </div>
+        </div>
+
+        <div style="display: flex; align-items: center; gap: 14px; padding: 12px 18px">
+          <div style="display: flex; flex-direction: column; gap: 2px; flex-grow: 1">
+            <span style="font-size: 14px">Подключать последний профиль</span>
+            <span style="font-size: 12px; color: #71717a">Сразу после запуска приложения</span>
+          </div>
+          <div style="width: 44px; height: 26px; border-radius: 999px; background: #3f3f46; padding: 3px; display: flex; justify-content: flex-start">
+            <div style="width: 20px; height: 20px; border-radius: 999px; background: #a1a1aa"></div>
+          </div>
+        </div>
+      </div>
+
+      <div style="display: flex; flex-direction: column; gap: 16px">
+
+        <div style="display: flex; flex-direction: column; padding: 6px 4px 8px; border-radius: 16px; background: #131316; border: 1px solid #27272a">
+          <span style="font-size: 12px; font-weight: 600; color: #71717a; letter-spacing: 0.04em; text-transform: uppercase; padding: 12px 18px 8px">Ядро</span>
+
+          <div style="display: flex; align-items: center; gap: 14px; padding: 12px 18px">
+            <div style="display: flex; flex-direction: column; gap: 2px; flex-grow: 1">
+              <span style="font-size: 14px">Версия</span>
+              <span style="font-size: 12px; color: #71717a">Обновлено сегодня · проверка каждые 6 часов</span>
+            </div>
+            <span style="font-size: 13px; color: #34d399">v3.4.0</span>
+          </div>
+
+          <div style="display: flex; align-items: center; gap: 14px; padding: 12px 18px">
+            <div style="display: flex; flex-direction: column; gap: 2px; flex-grow: 1">
+              <span style="font-size: 14px">Обновление</span>
+              <span style="font-size: 12px; color: #71717a">Спрашивать перед установкой</span>
+            </div>
+            <div style="display: flex; align-items: center; height: 32px; padding: 0 14px; border-radius: 8px; background: #18181b; border: 1px solid #27272a">
+              <span style="font-size: 13px; color: #d4d4d8">Проверить</span>
+            </div>
+          </div>
+        </div>
+
+        <div style="display: flex; flex-direction: column; padding: 6px 4px 8px; border-radius: 16px; background: #131316; border: 1px solid #27272a">
+          <span style="font-size: 12px; font-weight: 600; color: #71717a; letter-spacing: 0.04em; text-transform: uppercase; padding: 12px 18px 8px">Профили и подписки</span>
+
+          <div style="display: flex; align-items: center; gap: 14px; padding: 12px 18px">
+            <div style="display: flex; flex-direction: column; gap: 2px; flex-grow: 1">
+              <span style="font-size: 14px">Подписка</span>
+              <span style="font-size: 12px; color: #71717a">example.com/sub.md · обновлено 2 часа назад</span>
+            </div>
+            <div style="display: flex; align-items: center; height: 32px; padding: 0 14px; border-radius: 8px; background: #18181b; border: 1px solid #27272a">
+              <span style="font-size: 13px; color: #d4d4d8">Обновить</span>
+            </div>
+          </div>
+
+          <div style="display: flex; align-items: center; gap: 14px; padding: 12px 18px">
+            <div style="display: flex; flex-direction: column; gap: 2px; flex-grow: 1">
+              <span style="font-size: 14px">Резервная копия</span>
+              <span style="font-size: 12px; color: #71717a">Формат совместим с Android-клиентом</span>
+            </div>
+            <div style="display: flex; align-items: center; gap: 8px">
+              <div style="display: flex; align-items: center; height: 32px; padding: 0 14px; border-radius: 8px; background: #18181b; border: 1px solid #27272a">
+                <span style="font-size: 13px; color: #d4d4d8">Экспорт</span>
+              </div>
+              <div style="display: flex; align-items: center; height: 32px; padding: 0 14px; border-radius: 8px; background: #18181b; border: 1px solid #27272a">
+                <span style="font-size: 13px; color: #d4d4d8">Импорт</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+    </div>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

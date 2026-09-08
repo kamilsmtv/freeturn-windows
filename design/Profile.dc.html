@@ -1,0 +1,148 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin: 0; font-family: system-ui, "Segoe UI", sans-serif; }
+    a { color: #34d399; text-decoration: none; }
+    a:hover { color: #6ee7b7; }
+  </style>
+</helmet>
+
+<div style="width: 1100px; height: 760px; display: flex; flex-direction: column; background: #09090b; color: #fafafa; overflow: hidden">
+
+  <div style="display: flex; align-items: center; gap: 14px; padding: 20px 32px; border-bottom: 1px solid #18181b">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#a1a1aa" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M15 5l-7 7 7 7"></path>
+    </svg>
+    <div style="display: flex; flex-direction: column; gap: 3px; flex-grow: 1">
+      <span style="font-size: 18px; font-weight: 600">vdsina NL01</span>
+      <span style="font-size: 12px; color: #71717a">Профиль подключения</span>
+    </div>
+    <div style="display: flex; align-items: center; gap: 8px; height: 36px; padding: 0 16px; border-radius: 8px; background: #18181b; border: 1px solid #27272a">
+      <span style="font-size: 13px">Поделиться</span>
+    </div>
+    <div style="display: flex; align-items: center; gap: 8px; height: 36px; padding: 0 18px; border-radius: 8px; background: #059669">
+      <span style="font-size: 13px; font-weight: 500; color: #ecfdf5">Сохранить</span>
+    </div>
+  </div>
+
+  <div style="flex-grow: 1; display: flex; flex-direction: column; gap: 14px; padding: 22px 32px; overflow: hidden">
+
+    <!-- Обычному пользователю хватает трёх полей: остальное скрыто -->
+    <div style="display: flex; flex-direction: column; gap: 16px; padding: 22px 24px; border-radius: 16px; background: #131316; border: 1px solid #27272a">
+      <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px">
+        <div style="display: flex; flex-direction: column; gap: 7px">
+          <span style="font-size: 12px; color: #a1a1aa">Адрес сервера</span>
+          <div style="display: flex; align-items: center; height: 42px; padding: 0 14px; border-radius: 8px; background: #09090b; border: 1px solid #3f3f46">
+            <span style="font-size: 14px">203.0.113.10:56000</span>
+          </div>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 7px">
+          <span style="font-size: 12px; color: #a1a1aa">Ссылка на звонок VK Calls</span>
+          <div style="display: flex; align-items: center; height: 42px; padding: 0 14px; border-radius: 8px; background: #09090b; border: 1px solid #3f3f46">
+            <span style="font-size: 14px; color: #e4e4e7">vk.ru/call/join/9xzCoCyZYxbXlT3Z…</span>
+          </div>
+        </div>
+      </div>
+
+      <div style="display: flex; flex-direction: column; gap: 8px">
+        <span style="font-size: 12px; color: #a1a1aa">Режим работы</span>
+        <div style="display: flex; gap: 10px">
+          <div style="flex-grow: 1; display: flex; align-items: center; gap: 12px; padding: 14px 16px; border-radius: 12px; background: #0f1a15; border: 1px solid #10b981">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 3 4 6v6c0 4.5 3.2 7.9 8 9 4.8-1.1 8-4.5 8-9V6z"></path>
+            </svg>
+            <div style="display: flex; flex-direction: column; gap: 2px">
+              <span style="font-size: 14px; font-weight: 500">VPN — весь трафик</span>
+              <span style="font-size: 12px; color: #71717a">Туннель поднимает само приложение</span>
+            </div>
+          </div>
+          <div style="flex-grow: 1; display: flex; align-items: center; gap: 12px; padding: 14px 16px; border-radius: 12px; background: #18181b; border: 1px solid #27272a">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#71717a" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M4 12h16M14 6l6 6-6 6"></path>
+            </svg>
+            <div style="display: flex; flex-direction: column; gap: 2px">
+              <span style="font-size: 14px; font-weight: 500; color: #d4d4d8">Прокси — локальный порт</span>
+              <span style="font-size: 12px; color: #71717a">Для Xray, sing-box или своего клиента</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div style="display: flex; align-items: center; gap: 12px; padding: 14px 16px; border-radius: 12px; background: #0f1a15; border: 1px solid #14532d">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M4 12.5 9.5 18 20 6.5"></path>
+        </svg>
+        <div style="display: flex; flex-direction: column; gap: 2px; flex-grow: 1">
+          <span style="font-size: 13px">Конфигурация WireGuard получена с сервера</span>
+          <span style="font-size: 12px; color: #71717a">Адрес 10.13.13.3 · обфускация rtpopus · ключи выдал сервер</span>
+        </div>
+        <span style="font-size: 12px; color: #a1a1aa; text-decoration: underline">Запросить заново</span>
+      </div>
+    </div>
+
+    <!-- Всё редкое - за одним переключателем, как отдельные экраны в Android -->
+    <div style="display: flex; align-items: center; gap: 12px; padding: 16px 20px; border-radius: 12px; background: #131316; border: 1px solid #27272a">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#a1a1aa" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M6 9l6 6 6-6"></path>
+      </svg>
+      <span style="font-size: 14px; font-weight: 500; flex-grow: 1">Дополнительно</span>
+      <span style="font-size: 12px; color: #71717a">транспорт, потоки, DNS, KCP, раздельное туннелирование</span>
+    </div>
+
+    <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px">
+      <div style="display: flex; flex-direction: column; gap: 10px; padding: 18px 20px; border-radius: 16px; background: #131316; border: 1px solid #27272a">
+        <span style="font-size: 12px; font-weight: 600; color: #a1a1aa; letter-spacing: 0.04em; text-transform: uppercase">Обфускация</span>
+        <div style="display: flex; align-items: center; justify-content: space-between">
+          <span style="font-size: 13px; color: #d4d4d8">Профиль</span>
+          <span style="font-size: 13px">rtpopus</span>
+        </div>
+        <div style="display: flex; align-items: center; justify-content: space-between">
+          <span style="font-size: 13px; color: #d4d4d8">Ключ</span>
+          <span style="font-size: 13px; color: #71717a">совпадает с сервером</span>
+        </div>
+      </div>
+
+      <div style="display: flex; flex-direction: column; gap: 10px; padding: 18px 20px; border-radius: 16px; background: #131316; border: 1px solid #27272a">
+        <span style="font-size: 12px; font-weight: 600; color: #a1a1aa; letter-spacing: 0.04em; text-transform: uppercase">Раздельное туннелирование</span>
+        <div style="display: flex; align-items: center; justify-content: space-between">
+          <span style="font-size: 13px; color: #d4d4d8">Режим</span>
+          <span style="font-size: 13px">весь трафик</span>
+        </div>
+        <span style="font-size: 12px; color: #71717a">На Windows делится по подсетям</span>
+      </div>
+
+      <div style="display: flex; flex-direction: column; gap: 10px; padding: 18px 20px; border-radius: 16px; background: #131316; border: 1px solid #27272a">
+        <span style="font-size: 12px; font-weight: 600; color: #a1a1aa; letter-spacing: 0.04em; text-transform: uppercase">Потоки TURN</span>
+        <div style="display: flex; align-items: center; justify-content: space-between">
+          <span style="font-size: 13px; color: #d4d4d8">Параллельно</span>
+          <span style="font-size: 13px">12</span>
+        </div>
+        <span style="font-size: 12px; color: #71717a">Больше потоков — выше риск бана</span>
+      </div>
+    </div>
+
+    <div style="display: flex; align-items: center; gap: 10px; margin-top: auto">
+      <div style="display: flex; align-items: center; gap: 8px; height: 38px; padding: 0 16px; border-radius: 8px; background: #18181b; border: 1px solid #27272a">
+        <span style="font-size: 13px; color: #d4d4d8">Клонировать</span>
+      </div>
+      <div style="display: flex; align-items: center; gap: 8px; height: 38px; padding: 0 16px; border-radius: 8px; background: #18181b; border: 1px solid #27272a">
+        <span style="font-size: 13px; color: #d4d4d8">Сохранить .conf</span>
+      </div>
+      <span style="flex-grow: 1"></span>
+      <div style="display: flex; align-items: center; gap: 8px; height: 38px; padding: 0 16px; border-radius: 8px; border: 1px solid #7f1d1d">
+        <span style="font-size: 13px; color: #f87171">Удалить профиль</span>
+      </div>
+    </div>
+
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

@@ -1,0 +1,113 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin: 0; font-family: system-ui, "Segoe UI", sans-serif; }
+    a { color: #34d399; } a:hover { color: #6ee7b7; }
+  </style>
+</helmet>
+
+<div style="width: 560px; height: 440px; display: flex; flex-direction: column; gap: 20px; padding: 28px; background: #09090b; color: #fafafa">
+
+  <div style="display: flex; flex-direction: column; gap: 4px">
+    <span style="font-size: 17px; font-weight: 600">B · Ромб с проходом</span>
+    <span style="font-size: 12px; color: #71717a">Контур разомкнут по диагонали: трафик входит и выходит через реле</span>
+  </div>
+
+  <div style="display: flex; align-items: flex-end; gap: 24px">
+
+    <div style="width: 128px; height: 128px; border-radius: 28px; background: #18181b; display: flex; align-items: center; justify-content: center">
+      <svg width="96" height="96" viewBox="0 0 256 256" fill="none">
+        <path d="M92 60 128 24 232 128 196 164" stroke="#10b981" stroke-width="16" stroke-linecap="round" stroke-linejoin="round"></path>
+        <path d="M164 196 128 232 24 128 60 92" stroke="#10b981" stroke-width="16" stroke-linecap="round" stroke-linejoin="round"></path>
+        <path d="M128 92 164 128 128 164 92 128Z" fill="#10b981"></path>
+      </svg>
+    </div>
+
+    <div style="display: flex; align-items: flex-end; gap: 16px">
+      <div style="display: flex; flex-direction: column; align-items: center; gap: 8px">
+        <div style="width: 48px; height: 48px; border-radius: 11px; background: #18181b; display: flex; align-items: center; justify-content: center">
+          <svg width="36" height="36" viewBox="0 0 256 256" fill="none">
+            <path d="M92 60 128 24 232 128 196 164" stroke="#10b981" stroke-width="16" stroke-linecap="round" stroke-linejoin="round"></path>
+            <path d="M164 196 128 232 24 128 60 92" stroke="#10b981" stroke-width="16" stroke-linecap="round" stroke-linejoin="round"></path>
+            <path d="M128 92 164 128 128 164 92 128Z" fill="#10b981"></path>
+          </svg>
+        </div>
+        <span style="font-size: 11px; color: #71717a">48</span>
+      </div>
+
+      <div style="display: flex; flex-direction: column; align-items: center; gap: 8px">
+        <div style="width: 32px; height: 32px; border-radius: 7px; background: #18181b; display: flex; align-items: center; justify-content: center">
+          <svg width="24" height="24" viewBox="0 0 256 256" fill="none">
+            <path d="M92 60 128 24 232 128 196 164" stroke="#10b981" stroke-width="20" stroke-linecap="round" stroke-linejoin="round"></path>
+            <path d="M164 196 128 232 24 128 60 92" stroke="#10b981" stroke-width="20" stroke-linecap="round" stroke-linejoin="round"></path>
+            <path d="M128 92 164 128 128 164 92 128Z" fill="#10b981"></path>
+          </svg>
+        </div>
+        <span style="font-size: 11px; color: #71717a">32</span>
+      </div>
+
+      <div style="display: flex; flex-direction: column; align-items: center; gap: 8px">
+        <div style="width: 16px; height: 16px; border-radius: 4px; background: #18181b; display: flex; align-items: center; justify-content: center">
+          <svg width="14" height="14" viewBox="0 0 256 256" fill="none">
+            <path d="M84 52 128 20 236 128 204 172" stroke="#10b981" stroke-width="26" stroke-linecap="round" stroke-linejoin="round"></path>
+            <path d="M172 204 128 236 20 128 52 84" stroke="#10b981" stroke-width="26" stroke-linecap="round" stroke-linejoin="round"></path>
+            <path d="M128 96 160 128 128 160 96 128Z" fill="#10b981"></path>
+          </svg>
+        </div>
+        <span style="font-size: 11px; color: #71717a">16</span>
+      </div>
+    </div>
+  </div>
+
+  <div style="display: flex; align-items: center; gap: 16px; padding-top: 4px">
+
+    <div style="display: flex; flex-direction: column; align-items: center; gap: 8px">
+      <div style="width: 64px; height: 64px; border-radius: 14px; background: #f4f4f5; display: flex; align-items: center; justify-content: center">
+        <svg width="48" height="48" viewBox="0 0 256 256" fill="none">
+          <path d="M92 60 128 24 232 128 196 164" stroke="#047857" stroke-width="16" stroke-linecap="round" stroke-linejoin="round"></path>
+          <path d="M164 196 128 232 24 128 60 92" stroke="#047857" stroke-width="16" stroke-linecap="round" stroke-linejoin="round"></path>
+          <path d="M128 92 164 128 128 164 92 128Z" fill="#047857"></path>
+        </svg>
+      </div>
+      <span style="font-size: 11px; color: #71717a">светлая тема</span>
+    </div>
+
+    <div style="display: flex; flex-direction: column; align-items: center; gap: 8px">
+      <div style="width: 64px; height: 64px; border-radius: 14px; background: #27272a; display: flex; align-items: center; justify-content: center">
+        <svg width="40" height="40" viewBox="0 0 256 256" fill="none">
+          <path d="M92 60 128 24 232 128 196 164" stroke="#fafafa" stroke-width="18" stroke-linecap="round" stroke-linejoin="round"></path>
+          <path d="M164 196 128 232 24 128 60 92" stroke="#fafafa" stroke-width="18" stroke-linecap="round" stroke-linejoin="round"></path>
+          <path d="M128 92 164 128 128 164 92 128Z" fill="#fafafa"></path>
+        </svg>
+      </div>
+      <span style="font-size: 11px; color: #71717a">трей, моно</span>
+    </div>
+
+    <div style="display: flex; flex-direction: column; align-items: center; gap: 8px">
+      <div style="width: 64px; height: 64px; border-radius: 14px; background: #18181b; display: flex; align-items: center; justify-content: center">
+        <svg width="40" height="40" viewBox="0 0 256 256" fill="none">
+          <path d="M92 60 128 24 232 128 196 164" stroke="#3f3f46" stroke-width="18" stroke-linecap="round" stroke-linejoin="round"></path>
+          <path d="M164 196 128 232 24 128 60 92" stroke="#3f3f46" stroke-width="18" stroke-linecap="round" stroke-linejoin="round"></path>
+          <path d="M128 92 164 128 128 164 92 128Z" fill="#3f3f46"></path>
+        </svg>
+      </div>
+      <span style="font-size: 11px; color: #71717a">отключено</span>
+    </div>
+
+    <div style="flex-grow: 1; display: flex; flex-direction: column; gap: 6px; padding-left: 8px">
+      <span style="font-size: 12px; color: #a1a1aa">Плюс: свой характер, разрыв читается как проход трафика.</span>
+      <span style="font-size: 12px; color: #71717a">Минус: в 16 px разрыв почти сливается — нужен утолщённый контур.</span>
+    </div>
+  </div>
+
+</div>
+</x-dc>
+</body>
+</html>

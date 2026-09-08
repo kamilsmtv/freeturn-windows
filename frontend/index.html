@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>FreeTurn</title>
+    <script>
+      // Аварийный экран: без него ошибка в JS выглядит как пустое окно,
+      // и понять, что случилось, нельзя ни по логу, ни по виду.
+      (function () {
+        function show(title, detail) {
+          var root = document.getElementById("root");
+          if (!root) return;
+          root.innerHTML =
+            '<div style="font:14px system-ui;padding:24px;color:#111;background:#fff;height:100vh">' +
+            '<h1 style="font-size:16px;margin:0 0 8px">' + title + "</h1>" +
+            '<pre style="white-space:pre-wrap;font:12px ui-monospace;color:#b91c1c">' +
+            String(detail).replace(/[<>]/g, "") +
+            "</pre></div>";
+        }
+        window.addEventListener("error", function (e) {
+          var stack = (e.error && e.error.stack) || "";
+          show("Интерфейс не запустился", e.message + "\n" + (e.filename || "") + ":" + (e.lineno || "") + "\n\n" + stack);
+        });
+        window.addEventListener("unhandledrejection", function (e) {
+          var reason = e.reason;
+          show("Ошибка в интерфейсе", (reason && (reason.stack || reason.message)) || reason);
+        });
+        // Скрипт мог вообще не загрузиться - тогда события ошибки не будет.
+        window.addEventListener("load", function () {
+          setTimeout(function () {
+            var root = document.getElementById("root");
+            if (root && root.childElementCount === 0) {
+              show("Интерфейс не отрисовался", "Страница загружена, но React ничего не вывел.");
+            }
+          }, 2500);
+        });
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

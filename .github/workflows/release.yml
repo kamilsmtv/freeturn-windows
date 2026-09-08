@@ -1,0 +1,89 @@
+name: Релиз
+
+on:
+  push:
+    tags: ["v*"]
+  # Позволяет собрать .exe вручную, не создавая тег.
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  GO_VERSION: "1.25"
+  NODE_VERSION: "20"
+
+jobs:
+  build:
+    name: Сборка .exe
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Версия из тега
+        id: version
+        shell: bash
+        run: |
+          ref="${GITHUB_REF#refs/tags/}"
+          if [ "$ref" = "$GITHUB_REF" ]; then ref="0.0.0-dev"; fi
+          echo "version=${ref#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Сборка фронтенда
+        working-directory: frontend
+        run: |
+          npm ci
+          npm run build
+
+      - name: Ресурсы Windows (иконка, манифест, версия)
+        shell: bash
+        run: |
+          go install github.com/tc-hib/go-winres@v0.3.3
+          go-winres make --in winres/winres.json --arch amd64 --out rsrc \
+            --file-version "${{ steps.version.outputs.version }}" \
+            --product-version "${{ steps.version.outputs.version }}"
+
+      - name: Сборка .exe
+        shell: bash
+        env:
+          GOOS: windows
+          GOARCH: amd64
+          CGO_ENABLED: "0"
+        run: |
+          mkdir -p dist
+          go build -tags desktop,production \
+            -ldflags "-s -w -H windowsgui -X main.version=${{ steps.version.outputs.version }}" \
+            -o dist/FreeTurn.exe .
+
+      - name: Контрольная сумма
+        shell: bash
+        working-directory: dist
+        run: sha256sum FreeTurn.exe > checksums.txt
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: FreeTurn-windows-amd64
+          path: dist/
+
+      - name: Публикация релиза
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v3
+        with:
+          files: |
+            dist/FreeTurn.exe
+            dist/checksums.txt
+          body: |
+            Десктопный клиент ядра [free-turn-proxy](https://github.com/samosvalishe/free-turn-proxy) для Windows 10/11 x64.
+
+            Требуется WebView2 (в Windows 11 уже есть) и запуск от имени администратора.
+            Ядро приложение скачивает само при первом запуске.
+          generate_release_notes: true

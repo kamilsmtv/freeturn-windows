@@ -1,0 +1,50 @@
+# Набор линтеров для FreeTurn. Правило простое: включено то, что ловит
+# настоящие ошибки, а не стиль ради стиля.
+run:
+  timeout: 5m
+  # Основная цель - Windows: часть кода собирается только под неё.
+  build-tags:
+    - desktop
+    - production
+
+linters:
+  enable:
+    - errcheck      # проглоченные ошибки
+    - govet
+    - ineffassign
+    - staticcheck
+    - unused
+    - bodyclose     # незакрытые тела HTTP-ответов
+    - errorlint     # сравнение ошибок вместо errors.Is/As
+    - nilerr        # return nil при непустой ошибке
+    - rowserrcheck
+    - unconvert
+    - misspell
+    - gocritic
+    - revive
+
+linters-settings:
+  errcheck:
+    # Ошибки записи в журнал и закрытия ничего не решают - проверяем их явно
+    # там, где это важно, а не везде.
+    check-type-assertions: true
+  revive:
+    rules:
+      - name: exported
+        arguments:
+          - disableStutteringCheck
+  gocritic:
+    disabled-checks:
+      - ifElseChain
+  misspell:
+    locale: US
+
+issues:
+  exclude-rules:
+    # В тестах допустимы длинные функции и проглоченные ошибки подготовки.
+    - path: _test\.go
+      linters:
+        - errcheck
+        - gocritic
+  max-issues-per-linter: 0
+  max-same-issues: 0

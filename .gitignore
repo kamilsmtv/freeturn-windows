@@ -1,0 +1,11 @@
+reference/
+build/bin/
+node_modules/
+frontend/dist/*
+!frontend/dist/.gitkeep
+frontend/tsconfig.tsbuildinfo
+*.exe
+
+# Локальные файлы агента: память и настройки Claude Code живут вне репозитория,
+# но если каталог появится внутри - он не должен попасть в коммит.
+.claude/

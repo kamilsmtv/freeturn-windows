@@ -1,0 +1,13 @@
+# Единый конец строки в репозитории; в рабочем каталоге Windows git
+# развернёт их сам, если так настроен core.autocrlf.
+* text=auto eol=lf
+
+# Скрипты для Windows должны остаться с CRLF даже в репозитории.
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# Бинарное содержимое не трогаем.
+*.png binary
+*.ico binary
+*.syso binary
+*.exe binary
