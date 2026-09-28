@@ -78,6 +78,7 @@ func Ensure(ctx context.Context, dir string, onProgress func(done, total int64))
 	}
 
 	tmp := Path(dir) + ".download"
+	defer func() { _ = os.Remove(tmp) }()
 	if err := os.WriteFile(tmp, dll, 0o600); err != nil {
 		return err
 	}
@@ -148,4 +149,82 @@ func (p *progressWriter) Write(b []byte) (int, error) {
 		p.on(p.done, p.total)
 	}
 	return n, err
+}
+
+// InstallFromFile ставит библиотеку из файла, принесённого руками.
+//
+// Нужен там, где wintun.net недоступен без VPN, а VPN не поднять без
+// библиотеки. Принимается и официальный архив, и распакованная dll:
+// проверка та же самая - SHA256 должен совпасть с зашитым, поэтому
+// подсунуть чужой бинарь этим путём не выйдет.
+func InstallFromFile(dir, path string) error {
+	data, err := readLimited(path)
+	if err != nil {
+		return err
+	}
+
+	dll := data
+	if sum(data) != dllSHA256 {
+		// Не библиотека - значит, должен быть архив с ней внутри.
+		extracted, err := extract(data)
+		if err != nil {
+			return fmt.Errorf("это не wintun %s: ни библиотека, ни её архив (%w)", Version, err)
+		}
+		dll = extracted
+	}
+	if got := sum(dll); got != dllSHA256 {
+		return fmt.Errorf("контрольная сумма wintun.dll не совпала: ожидалась %s, получена %s", dllSHA256, got)
+	}
+
+	// Библиотека версии Version всегда одна и та же, так что переписывать
+	// уже лежащую нечем. А если туннель поднят, файл открыт системой, и
+	// замена сорвалась бы на ровном месте.
+	if Installed(dir) {
+		return nil
+	}
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return err
+	}
+
+	tmp, err := os.CreateTemp(dir, FileName+".*.part")
+	if err != nil {
+		return err
+	}
+	defer func() { _ = os.Remove(tmp.Name()) }()
+	if _, err := tmp.Write(dll); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	return os.Rename(tmp.Name(), Path(dir))
+}
+
+// maxFileSize - потолок для файла, выбранного руками. Официальный архив
+// весит около мегабайта; без ограничения случайно выбранный образ диска
+// уехал бы в память целиком и подвесил окно.
+const maxFileSize = 64 << 20
+
+// readLimited читает файл целиком, отказываясь от заведомо чужих размеров.
+func readLimited(path string) ([]byte, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, fmt.Errorf("не удалось прочитать файл: %w", err)
+	}
+	defer func() { _ = f.Close() }()
+
+	if st, err := f.Stat(); err == nil {
+		if st.IsDir() {
+			return nil, errors.New("выбран каталог, а нужен архив или библиотека")
+		}
+		if st.Size() > maxFileSize {
+			return nil, fmt.Errorf("файл великоват для wintun: %d МиБ - это точно не тот архив", st.Size()>>20)
+		}
+	}
+	data, err := io.ReadAll(io.LimitReader(f, maxFileSize))
+	if err != nil {
+		return nil, fmt.Errorf("не удалось прочитать файл: %w", err)
+	}
+	return data, nil
 }

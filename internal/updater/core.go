@@ -12,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/kamilsmtv/freeturn-windows/internal/core"
@@ -73,6 +74,11 @@ type CoreUpdater struct {
 
 	Stop  StopFunc
 	Start StartFunc
+
+	// Установка меняет файл ядра на месте: две одновременные (например,
+	// автообновление по таймеру и ручной выбор файла) затёрли бы друг
+	// другу и временный файл, и сохранённую прежнюю версию.
+	mu sync.Mutex
 }
 
 // NewCoreUpdater создаёт апдейтер ядра для каталога dir.
@@ -169,6 +175,9 @@ var ErrNoAsset = fmt.Errorf("в релизе нет файла %s", AssetName)
 // подменить файл (старый сохранить как client.prev.exe) -> убедиться, что
 // новый бинарь запускается -> при неудаче вернуть прежний.
 func (u *CoreUpdater) Install(ctx context.Context, force bool, onProgress func(Progress)) (Status, error) {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+
 	report := func(stage string, done, total int64) {
 		if onProgress != nil {
 			onProgress(Progress{Stage: stage, Downloaded: done, Total: total})
@@ -251,6 +260,9 @@ func (u *CoreUpdater) canRollback() bool {
 
 // Rollback возвращает предыдущую сборку ядра.
 func (u *CoreUpdater) Rollback(ctx context.Context) (Status, error) {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+
 	if !u.canRollback() {
 		return u.Check(ctx, false), errors.New("предыдущая версия ядра не сохранена")
 	}
@@ -395,4 +407,185 @@ func (c *countingWriter) Write(p []byte) (int, error) {
 		c.onWrite(c.n)
 	}
 	return len(p), nil
+}
+
+// InstallFromFile ставит ядро из файла, принесённого руками.
+//
+// GitHub блокируется не реже сайтов остальных компонентов, а без ядра
+// приложение не подключится и не скачает ядро само. Файл проходит тот же
+// путь, что и скачанный: подмена с сохранением прежней версии и проверка
+// запуском, а если рядом с ним лежит checksums.txt из релиза - ещё и
+// сверка контрольной суммы.
+func (u *CoreUpdater) InstallFromFile(ctx context.Context, path string) (Status, error) {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+
+	if err := os.MkdirAll(u.Dir, 0o700); err != nil {
+		return u.LocalStatus(ctx), err
+	}
+	tmp := filepath.Join(u.Dir, "client.download")
+	if same, err := samePath(path, tmp); err != nil {
+		return u.LocalStatus(ctx), err
+	} else if same {
+		// Иначе копирование обрезало бы собственный источник.
+		return u.LocalStatus(ctx), errors.New("этот файл - временный файл установки; выберите скачанный бинарь ядра")
+	}
+	defer func() { _ = os.Remove(tmp) }()
+
+	sum, err := copyToFile(path, tmp)
+	if err != nil {
+		return u.LocalStatus(ctx), err
+	}
+	if want := sumFromSidecar(path); want != "" && !strings.EqualFold(want, sum) {
+		return u.LocalStatus(ctx), fmt.Errorf("контрольная сумма из checksums.txt не совпала: ожидалась %s, получена %s", want, sum)
+	}
+
+	prevVersion := u.CurrentVersion(ctx)
+	wasRunning := false
+	if u.Stop != nil {
+		if wasRunning, err = u.Stop(); err != nil {
+			return u.LocalStatus(ctx), fmt.Errorf("не удалось остановить ядро перед заменой: %w", err)
+		}
+	}
+	// Ядро было остановлено ради замены: чем бы она ни кончилась, человек
+	// не должен остаться без связи молча.
+	resume := func(err error) (Status, error) {
+		if wasRunning && u.Start != nil && u.Installed() {
+			if serr := u.Start(); serr != nil {
+				return u.LocalStatus(ctx), fmt.Errorf("%w (ядро при этом не запустилось обратно: %w)", err, serr)
+			}
+		}
+		return u.LocalStatus(ctx), err
+	}
+
+	if err := u.swap(tmp); err != nil {
+		return resume(err)
+	}
+
+	// Проверка запуском тут важнее, чем при скачивании: файл мог прийти
+	// откуда угодно и оказаться не тем бинарём вовсе.
+	newVersion, perr := core.ProbeVersion(ctx, u.BinPath())
+	if perr != nil {
+		if rerr := u.restorePrev(); rerr != nil {
+			// Прежней версии не было - на месте остался негодный файл.
+			_ = os.Remove(u.BinPath())
+		}
+		return resume(fmt.Errorf("выбранный файл не запустился как ядро: %w", perr))
+	}
+
+	if err := u.saveMeta(Meta{
+		Version:     newVersion,
+		SHA256:      sum,
+		InstalledAt: time.Now(),
+		PrevVersion: prevVersion,
+		Source:      "файл: " + filepath.Base(path),
+	}); err != nil {
+		return resume(err)
+	}
+
+	if wasRunning && u.Start != nil {
+		if err := u.Start(); err != nil {
+			return u.LocalStatus(ctx), fmt.Errorf("ядро заменено, но не запустилось: %w", err)
+		}
+	}
+	return u.LocalStatus(ctx), nil
+}
+
+// LocalStatus собирает состояние, не выходя в сеть.
+//
+// Ручная установка нужна ровно там, где GitHub недоступен: спрашивать его о
+// последнем релизе после неё - значит держать человека у крутящейся кнопки
+// все 20 секунд таймаута. Сведения о релизе берём из кэша, если он есть.
+func (u *CoreUpdater) LocalStatus(ctx context.Context) Status {
+	st := Status{
+		Installed:      u.Installed(),
+		Version:        u.CurrentVersion(ctx),
+		CanRollback:    u.canRollback(),
+		RollbackTarget: u.Meta().PrevVersion,
+		CheckedAt:      time.Now().Format(time.RFC3339),
+	}
+	rel, ok := u.GitHub.Cached(u.Repo)
+	if !ok {
+		return st
+	}
+	st.LatestVersion = NormalizeVersion(rel.TagName)
+	st.Changelog = rel.Body
+	st.ReleaseURL = rel.HTMLURL
+	st.UpdateReady = IsNewer(st.LatestVersion, st.Version)
+	return st
+}
+
+// copyToFile перекладывает выбранный файл во временный и попутно считает
+// SHA256. Источник закрывается здесь же: Windows не даст переименовать
+// файл, на который остался открытый описатель, а выбрать могли и сам
+// client.exe из каталога ядра.
+func copyToFile(path, dst string) (string, error) {
+	src, err := os.Open(path)
+	if err != nil {
+		return "", fmt.Errorf("не удалось прочитать файл: %w", err)
+	}
+	defer func() { _ = src.Close() }()
+
+	// Бинарь ядра - десятки мегабайт. Всё, что сильно больше, выбрали по
+	// ошибке, и копировать это в каталог ядра незачем.
+	if st, err := src.Stat(); err == nil {
+		if st.IsDir() {
+			return "", errors.New("выбран каталог, а нужен файл ядра")
+		}
+		if st.Size() > maxCoreSize {
+			return "", fmt.Errorf("файл великоват для ядра: %d МиБ - похоже, выбран не тот файл", st.Size()>>20)
+		}
+	}
+
+	out, err := os.OpenFile(dst, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o700)
+	if err != nil {
+		return "", err
+	}
+	h := sha256.New()
+	if _, err := io.Copy(io.MultiWriter(out, h), src); err != nil {
+		_ = out.Close()
+		return "", fmt.Errorf("не удалось скопировать файл: %w", err)
+	}
+	if err := out.Close(); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(h.Sum(nil)), src.Close()
+}
+
+// maxCoreSize - потолок для файла, выбранного руками.
+const maxCoreSize = 512 << 20
+
+// samePath сообщает, указывают ли пути на одно и то же место.
+func samePath(a, b string) (bool, error) {
+	pa, err := filepath.Abs(a)
+	if err != nil {
+		return false, err
+	}
+	pb, err := filepath.Abs(b)
+	if err != nil {
+		return false, err
+	}
+	return strings.EqualFold(filepath.Clean(pa), filepath.Clean(pb)), nil
+}
+
+// sumFromSidecar достаёт сумму ассета из checksums.txt, если тот лежит
+// рядом с выбранным файлом. Нет файла - нет и сверки: это не повод
+// отказываться ставить ядро, запуском мы его всё равно проверим.
+func sumFromSidecar(path string) string {
+	data, err := os.ReadFile(filepath.Join(filepath.Dir(path), ChecksumsName))
+	if err != nil {
+		return ""
+	}
+	// Файл могли переименовать при скачивании - тогда сверяемся со
+	// строкой официального ассета.
+	for _, name := range []string{filepath.Base(path), AssetName} {
+		for _, line := range strings.Split(string(data), "\n") {
+			fields := strings.Fields(line)
+			// sha256sum в двоичном режиме помечает имя звёздочкой.
+			if len(fields) == 2 && strings.TrimPrefix(fields[1], "*") == name {
+				return fields[0]
+			}
+		}
+	}
+	return ""
 }

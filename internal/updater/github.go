@@ -163,6 +163,17 @@ func (g *GitHub) LatestRelease(ctx context.Context, repo string, force bool) (Re
 	}
 }
 
+// Cached отдаёт последний известный релиз, не выходя в сеть. Нужен там,
+// где ждать ответа GitHub нельзя или незачем.
+func (g *GitHub) Cached(repo string) (Release, bool) {
+	g.loadCache()
+
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	entry, ok := g.cache[repo]
+	return entry.Release, ok
+}
+
 // remaining читает остаток лимита из заголовка; -1 - заголовка нет.
 func remaining(resp *http.Response) int {
 	v := resp.Header.Get("X-RateLimit-Remaining")

@@ -251,3 +251,198 @@ func TestInstallWithoutAsset(t *testing.T) {
 		t.Fatal("релиз без нужного файла должен давать ошибку")
 	}
 }
+
+// Сумму для принесённого руками бинаря берём из checksums.txt рядом с ним,
+// в том числе когда файл переименовали при скачивании.
+func TestSumFromSidecar(t *testing.T) {
+	dir := t.TempDir()
+	body := "aaa  " + ChecksumsName + "\nbbbb  " + AssetName + "\ncccc  client-copy.exe\n"
+	if err := os.WriteFile(filepath.Join(dir, ChecksumsName), []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	if got := sumFromSidecar(filepath.Join(dir, AssetName)); got != "bbbb" {
+		t.Fatalf("сумма по имени ассета: %q", got)
+	}
+	if got := sumFromSidecar(filepath.Join(dir, "client-copy.exe")); got != "cccc" {
+		t.Fatalf("сумма по имени файла: %q", got)
+	}
+	if got := sumFromSidecar(filepath.Join(dir, "прочее.exe")); got != "bbbb" {
+		t.Fatalf("откат к строке ассета: %q", got)
+	}
+	if got := sumFromSidecar(filepath.Join(t.TempDir(), AssetName)); got != "" {
+		t.Fatalf("без checksums.txt ожидалась пустая сумма, получено %q", got)
+	}
+}
+
+// Файл, который не запускается как ядро, ставиться не должен.
+func TestInstallFromFileRejectsNonCore(t *testing.T) {
+	dir := t.TempDir()
+	src := filepath.Join(dir, "client.exe")
+	if err := os.WriteFile(src, []byte("не бинарь"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	u := NewCoreUpdater(filepath.Join(dir, "bin"), "owner/repo", NewGitHub(dir, nil))
+	if _, err := u.InstallFromFile(context.Background(), src); err == nil {
+		t.Fatal("посторонний файл принят как ядро")
+	}
+	if u.Installed() {
+		t.Fatal("после отказа бинарь остался на месте")
+	}
+}
+
+// Импорт руками: файл ставится, версия опрашивается запуском, прежняя
+// сборка остаётся для отката, а остановленное ядро поднимается обратно.
+func TestInstallFromFileReplacesCore(t *testing.T) {
+	requireScriptSupport(t)
+	m := newMockGitHub(t, "v1.4.2", fakeCore("1.4.2"))
+	u := newTestUpdater(t, m)
+	if _, err := u.Install(context.Background(), true, nil); err != nil {
+		t.Fatalf("первая установка: %v", err)
+	}
+
+	stopped, started := 0, 0
+	u.Stop = func() (bool, error) { stopped++; return true, nil }
+	u.Start = func() error { started++; return nil }
+
+	next := fakeCore("1.5.0")
+	dir := t.TempDir()
+	src := filepath.Join(dir, AssetName)
+	if err := os.WriteFile(src, next, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, ChecksumsName),
+		[]byte(sha(next)+"  "+AssetName+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	st, err := u.InstallFromFile(context.Background(), src)
+	if err != nil {
+		t.Fatalf("InstallFromFile: %v", err)
+	}
+	if st.Version != "1.5.0" {
+		t.Fatalf("версия после импорта: %q", st.Version)
+	}
+	if !st.CanRollback || st.RollbackTarget != "1.4.2" {
+		t.Fatalf("откат не подготовлен: %+v", st)
+	}
+	if stopped != 1 || started != 1 {
+		t.Fatalf("ядро остановлено %d раз, запущено %d", stopped, started)
+	}
+	if m := u.Meta(); m.SHA256 != sha(next) || !strings.HasPrefix(m.Source, "файл: ") {
+		t.Fatalf("meta.json не описывает ручную установку: %+v", m)
+	}
+	if left, _ := filepath.Glob(filepath.Join(u.Dir, "*.download")); len(left) != 0 {
+		t.Fatalf("временный файл остался: %v", left)
+	}
+}
+
+// Сумма из checksums.txt не сошлась - ядро не трогаем вовсе.
+func TestInstallFromFileChecksumMismatch(t *testing.T) {
+	requireScriptSupport(t)
+	m := newMockGitHub(t, "v1.4.2", fakeCore("1.4.2"))
+	u := newTestUpdater(t, m)
+	if _, err := u.Install(context.Background(), true, nil); err != nil {
+		t.Fatalf("первая установка: %v", err)
+	}
+	stopped := 0
+	u.Stop = func() (bool, error) { stopped++; return true, nil }
+
+	dir := t.TempDir()
+	src := filepath.Join(dir, AssetName)
+	if err := os.WriteFile(src, fakeCore("1.5.0"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, ChecksumsName),
+		[]byte(sha([]byte("другое"))+"  *"+AssetName+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	st, err := u.InstallFromFile(context.Background(), src)
+	if err == nil {
+		t.Fatal("файл с чужой суммой принят")
+	}
+	if stopped != 0 {
+		t.Fatal("ядро остановили, хотя до замены дело не дошло")
+	}
+	if st.Version != "1.4.2" {
+		t.Fatalf("прежнее ядро пострадало: %q", st.Version)
+	}
+}
+
+// Негодный файл: прежняя сборка возвращается на место, а ядро - в работу.
+func TestInstallFromFileRestoresAfterBadBinary(t *testing.T) {
+	requireScriptSupport(t)
+	m := newMockGitHub(t, "v1.4.2", fakeCore("1.4.2"))
+	u := newTestUpdater(t, m)
+	if _, err := u.Install(context.Background(), true, nil); err != nil {
+		t.Fatalf("первая установка: %v", err)
+	}
+	started := 0
+	u.Stop = func() (bool, error) { return true, nil }
+	u.Start = func() error { started++; return nil }
+
+	src := filepath.Join(t.TempDir(), AssetName)
+	if err := os.WriteFile(src, []byte("это не ядро"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+
+	st, err := u.InstallFromFile(context.Background(), src)
+	if err == nil {
+		t.Fatal("негодный файл принят")
+	}
+	if st.Version != "1.4.2" {
+		t.Fatalf("прежняя версия не вернулась: %q", st.Version)
+	}
+	if started != 1 {
+		t.Fatalf("ядро не подняли обратно (%d запусков)", started)
+	}
+}
+
+// Без сети статус после импорта собирается из кэша, а не из запроса.
+func TestInstallFromFileStatusWithoutNetwork(t *testing.T) {
+	requireScriptSupport(t)
+	m := newMockGitHub(t, "v1.4.2", fakeCore("1.4.2"))
+	u := newTestUpdater(t, m)
+	if _, err := u.Install(context.Background(), true, nil); err != nil {
+		t.Fatalf("первая установка: %v", err)
+	}
+
+	// Имитируем блокировку GitHub: к API теперь не достучаться.
+	m.Close()
+	u.GitHub.APIBase = "http://127.0.0.1:1"
+
+	src := filepath.Join(t.TempDir(), AssetName)
+	if err := os.WriteFile(src, fakeCore("1.5.0"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+
+	st, err := u.InstallFromFile(context.Background(), src)
+	if err != nil {
+		t.Fatalf("InstallFromFile: %v", err)
+	}
+	if st.Error != "" {
+		t.Fatalf("недоступность GitHub просочилась в статус: %q", st.Error)
+	}
+	if st.Version != "1.5.0" || st.LatestVersion != "1.4.2" {
+		t.Fatalf("статус собран неверно: %+v", st)
+	}
+}
+
+// Временный файл установки в качестве источника - отказ, а не обрезанная копия.
+func TestInstallFromFileRejectsOwnTempFile(t *testing.T) {
+	m := newMockGitHub(t, "v1.4.2", fakeCore("1.4.2"))
+	u := newTestUpdater(t, m)
+
+	tmp := filepath.Join(u.Dir, "client.download")
+	if err := os.WriteFile(tmp, fakeCore("1.5.0"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := u.InstallFromFile(context.Background(), tmp); err == nil {
+		t.Fatal("временный файл принят как источник")
+	}
+	if _, err := os.Stat(tmp); err != nil {
+		t.Fatalf("источник пострадал: %v", err)
+	}
+}
