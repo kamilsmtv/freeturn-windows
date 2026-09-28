@@ -52,7 +52,7 @@ docs/        analysis.md, plan.md
    генератор WG-конфига (`Endpoint 127.0.0.1:9000`, `MTU 1280`).
 5. **Интеграция с Windows.** Трей и меню, свернуть-в-трей, автозапуск,
    автоподключение, корректная уборка маршрутов при выходе и при `taskkill`.
-6. **VPS по SSH.** `probe/install/wg-setup/start/logs/...` поверх install.sh ядра,
+6. **VPS по SSH.** `probe/apply/restart/logs/client-*` поверх install.sh ядра,
    живой лог, разбор ответа в новый профиль (peer, obf-key, client-id, WG-conf).
 7. **Тесты и CI.** Unit: парсинг/сборка `freeturn://`, сборка аргументов,
    сравнение версий, апдейтер на моке GitHub API, крипта бэкапа (вектор из

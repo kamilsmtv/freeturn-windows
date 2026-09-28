@@ -266,6 +266,7 @@ func encryptSecrets(p *Profile) {
 	p.SSH.Password = secrets.Protect(p.SSH.Password)
 	p.SSH.SSHKey = secrets.Protect(p.SSH.SSHKey)
 	p.SSH.SudoPassword = secrets.Protect(p.SSH.SudoPassword)
+	p.Client.SocksPassword = secrets.Protect(p.Client.SocksPassword)
 }
 
 // decryptSecrets возвращает секреты в открытый вид после чтения с диска.
@@ -274,4 +275,5 @@ func decryptSecrets(p *Profile) {
 	p.SSH.Password = secrets.Unprotect(p.SSH.Password)
 	p.SSH.SSHKey = secrets.Unprotect(p.SSH.SSHKey)
 	p.SSH.SudoPassword = secrets.Unprotect(p.SSH.SudoPassword)
+	p.Client.SocksPassword = secrets.Unprotect(p.Client.SocksPassword)
 }

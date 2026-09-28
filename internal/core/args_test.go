@@ -55,7 +55,7 @@ func TestBuildArgsSkipsDefaults(t *testing.T) {
 func TestBuildArgsFull(t *testing.T) {
 	p := base()
 	p.Client.Threads = 6
-	p.Client.StreamsPerCred = 12
+	p.Client.StreamsPerCred = 6
 	p.Client.LocalPort = "127.0.0.1:9100"
 	p.Client.UseUDP = true
 	p.Client.ManualCaptcha = true
@@ -73,7 +73,7 @@ func TestBuildArgsFull(t *testing.T) {
 
 	got := joined(BuildArgs(p))
 	for _, want := range []string{
-		"-turn 9.9.9.9", "-port 443", "-n 6", "-streams-per-cred 12",
+		"-turn 9.9.9.9", "-port 443", "-n 6", "-streams-per-cred 6",
 		"-listen 127.0.0.1:9100", "-transport udp", "-obf-profile rtpopus3",
 		"-obf-timing 20ms", "-manual-captcha", "-dns-mode doh",
 		"-dns-servers 1.1.1.1,8.8.8.8", "-routes", "-debug",
@@ -167,5 +167,177 @@ func TestRedactArgsHidesObfKey(t *testing.T) {
 	got := redactArgs([]string{"-obf-profile", "rtpopus3", "-obf-key", key})
 	if strings.Contains(got, key) {
 		t.Fatalf("ключ обфускации попал в журнал: %q", got)
+	}
+}
+
+// socksProfile - профиль с включённой раздачей и валидным окружением.
+func socksProfile() profile.Profile {
+	p := base()
+	p.Client.TunnelTransport = "wireguard"
+	p.Client.SocksHotspot = true
+	p.Client.SocksListen = profile.DefaultSocksListen
+	p.Client.SocksUser = "kamil"
+	p.Client.SocksPassword = "секрет"
+	return p
+}
+
+func TestValidateSocksOK(t *testing.T) {
+	if err := Validate(socksProfile()); err != nil {
+		t.Fatalf("Validate: %v", err)
+	}
+}
+
+// Забытая галка раздачи в прокси-профиле не должна мешать подключению:
+// раздачу приложение просто не поднимет.
+func TestValidateSocksIgnoredWithoutTunnel(t *testing.T) {
+	p := socksProfile()
+	p.Client.TunnelTransport = "none"
+	p.Client.SocksUser, p.Client.SocksPassword = "", ""
+	if err := Validate(p); err != nil {
+		t.Errorf("прокси-профиль с раздачей отвергнут: %v", err)
+	}
+}
+
+func TestValidateSocksNeedsPassword(t *testing.T) {
+	p := socksProfile()
+	p.Client.SocksUser = ""
+	if err := Validate(p); err == nil {
+		t.Error("раздача принята без логина")
+	}
+
+	p = socksProfile()
+	p.Client.SocksPassword = ""
+	if err := Validate(p); err == nil {
+		t.Error("раздача принята без пароля")
+	}
+}
+
+// Одинаковый номер порта у ядра и раздачи - не ошибка: ядро слушает UDP,
+// раздача TCP. Запрещать такой профиль было бы выдумкой.
+func TestValidateSocksSamePortAllowed(t *testing.T) {
+	p := socksProfile()
+	p.Client.LocalPort = "127.0.0.1:1080"
+	p.Client.SocksListen = "0.0.0.0:1080"
+	if err := Validate(p); err != nil {
+		t.Errorf("профиль отвергнут: %v", err)
+	}
+}
+
+func TestValidateSocksBadListen(t *testing.T) {
+	p := socksProfile()
+	p.Client.SocksListen = "1080"
+	if err := Validate(p); err == nil {
+		t.Error("адрес раздачи без хоста принят")
+	}
+}
+
+// Профиль, созданный до появления раздачи, поля адреса не имеет вовсе -
+// приложение подставит дефолт, а не заведёт человека в тупик.
+func TestValidateSocksEmptyListen(t *testing.T) {
+	p := socksProfile()
+	p.Client.SocksListen = ""
+	if err := Validate(p); err != nil {
+		t.Errorf("пустой адрес раздачи отвергнут: %v", err)
+	}
+}
+
+// Выключенная раздача не должна мешать: её поля могут остаться пустыми
+// от старого профиля.
+func TestValidateSocksDisabled(t *testing.T) {
+	p := base()
+	p.Client.SocksHotspot = false
+	p.Client.SocksListen, p.Client.SocksUser, p.Client.SocksPassword = "", "", ""
+	if err := Validate(p); err != nil {
+		t.Fatalf("Validate: %v", err)
+	}
+}
+
+// Провайдер direct ходит прямо на -peer, и флаги реле ядро игнорирует.
+// Писать их всё равно - значит путать того, кто читает журнал запуска.
+func TestBuildArgsDirectDropsRelayFlags(t *testing.T) {
+	p := base()
+	p.Client.Provider = profile.ProviderDirect
+	p.Client.UseUDP = true
+	p.Client.ManualCaptcha = true
+	p.Client.Platform = profile.PlatformMobile
+	p.Client.StreamsPerCred = 6
+	p.Client.MagicSwitch = true
+	p.Client.MagicTurn = "9.9.9.9"
+	p.Client.MagicPort = "443"
+
+	args := BuildArgs(p)
+	got := joined(args)
+	if !strings.Contains(got, "-provider direct") {
+		t.Errorf("в %q нет провайдера", got)
+	}
+	for _, unwanted := range []string{"-links", "-transport", "-manual-captcha", "-platform", "-streams-per-cred", "-turn", "-port"} {
+		if hasFlag(args, unwanted) {
+			t.Errorf("в режиме direct не нужен %q: %s", unwanted, got)
+		}
+	}
+}
+
+// У direct свой дефолт потоков - единица, и писать её незачем.
+func TestBuildArgsDirectThreadsDefault(t *testing.T) {
+	p := base()
+	p.Client.Provider = profile.ProviderDirect
+	p.Client.Threads = profile.DefaultNDirect
+	if hasFlag(BuildArgs(p), "-n") {
+		t.Error("-n равен дефолту direct, писать его не нужно")
+	}
+
+	p.Client.Threads = profile.DefaultN
+	if !hasFlag(BuildArgs(p), "-n") {
+		t.Error("12 потоков в режиме direct - не дефолт, флаг нужен")
+	}
+}
+
+// bond включается только в режиме tcp: в udp ядро его не знает.
+func TestBuildArgsBond(t *testing.T) {
+	p := base()
+	p.Client.Bond = true
+	if hasFlag(BuildArgs(p), "-bond") {
+		t.Error("-bond в режиме udp писать нельзя")
+	}
+
+	p.Opts.ProxyMode = profile.ModeTCP
+	if !hasFlag(BuildArgs(p), "-bond") {
+		t.Error("-bond в режиме tcp не выставлен")
+	}
+}
+
+// В режиме direct ссылка на звонок не нужна: реле не используется.
+func TestValidateDirectWithoutLink(t *testing.T) {
+	p := base()
+	p.Client.Provider = profile.ProviderDirect
+	p.Client.VKLink = ""
+	if err := Validate(p); err != nil {
+		t.Errorf("профиль direct отвергнут: %v", err)
+	}
+
+	p.Client.Provider = profile.ProviderVK
+	if err := Validate(p); err == nil {
+		t.Error("профиль vk без ссылки на звонок принят")
+	}
+}
+
+func TestValidateBondNeedsTCP(t *testing.T) {
+	p := base()
+	p.Client.Bond = true
+	if err := Validate(p); err == nil {
+		t.Error("bond принят в режиме udp")
+	}
+	p.Opts.ProxyMode = profile.ModeTCP
+	if err := Validate(p); err != nil {
+		t.Errorf("bond отвергнут в режиме tcp: %v", err)
+	}
+}
+
+// Выбор бэкенда живёт в профиле, но режим проброса tcp решает за него:
+// свой WireGuard скрипт поднимает только в udp.
+func TestServerBackendDefault(t *testing.T) {
+	p := profile.New("сервер")
+	if p.ServerBackend != profile.ServerBackendNew {
+		t.Errorf("по умолчанию ожидался свой WireGuard, получено %q", p.ServerBackend)
 	}
 }

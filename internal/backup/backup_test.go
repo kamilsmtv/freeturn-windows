@@ -143,3 +143,48 @@ func TestExportRequiresValidClientID(t *testing.T) {
 		t.Fatalf("ожидалась проверка client-id, получено %v", err)
 	}
 }
+
+// Раздача без логина и пароля не должна приезжать включённой: с ней
+// профиль не запустится, а причина будет неочевидной.
+func TestDecodeSocksWithoutCredentials(t *testing.T) {
+	raw := []json.RawMessage{json.RawMessage(`{"id":"a","name":"A","client":{
+		"serverAddress":"1.2.3.4:56000","socksHotspot":true}}`)}
+
+	got := decodeServers(raw)
+	if len(got) != 1 {
+		t.Fatalf("профилей = %d", len(got))
+	}
+	if got[0].Client.SocksHotspot {
+		t.Error("раздача без пароля приехала включённой")
+	}
+	if got[0].Client.SocksListen != profile.DefaultSocksListen {
+		t.Errorf("адрес раздачи = %q, ожидался дефолтный", got[0].Client.SocksListen)
+	}
+}
+
+// А с логином и паролем раздача переносится как есть.
+func TestDecodeSocksKept(t *testing.T) {
+	raw := []json.RawMessage{json.RawMessage(`{"id":"a","name":"A","client":{
+		"serverAddress":"1.2.3.4:56000","socksHotspot":true,"socksListen":"0.0.0.0:1081",
+		"socksUser":"kamil","socksPassword":"secret"}}`)}
+
+	c := decodeServers(raw)[0].Client
+	if !c.SocksHotspot || c.SocksListen != "0.0.0.0:1081" || c.SocksUser != "kamil" {
+		t.Errorf("раздача приехала искажённой: %+v", c)
+	}
+}
+
+// Выбор бэкенда обязан переживать бэкап: иначе установка на другой
+// машине подняла бы на сервере лишний WireGuard.
+func TestServerBackendRoundTrip(t *testing.T) {
+	raw := []json.RawMessage{json.RawMessage(`{"id":"a","name":"A","serverBackend":"external",
+		"proxyConnect":"127.0.0.1:443","client":{"serverAddress":"1.2.3.4:56000"}}`)}
+
+	got := decodeServers(raw)
+	if len(got) != 1 || got[0].ServerBackend != profile.ServerBackendExternal {
+		t.Fatalf("бэкенд не разобран: %+v", got)
+	}
+	if got[0].ProxyConnect != "127.0.0.1:443" {
+		t.Errorf("адрес чужого VPN потерян: %q", got[0].ProxyConnect)
+	}
+}

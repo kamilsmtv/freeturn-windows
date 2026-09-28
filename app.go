@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"path/filepath"
+	"sync"
 	"sync/atomic"
 
 	"github.com/kamilsmtv/freeturn-windows/internal/core"
@@ -10,6 +11,7 @@ import (
 	"github.com/kamilsmtv/freeturn-windows/internal/profile"
 	"github.com/kamilsmtv/freeturn-windows/internal/routes"
 	"github.com/kamilsmtv/freeturn-windows/internal/settings"
+	"github.com/kamilsmtv/freeturn-windows/internal/socks"
 	"github.com/kamilsmtv/freeturn-windows/internal/tray"
 	"github.com/kamilsmtv/freeturn-windows/internal/tunnel"
 	"github.com/kamilsmtv/freeturn-windows/internal/updater"
@@ -30,11 +32,22 @@ type App struct {
 
 	tray    *tray.Tray
 	tunnel  *tunnel.Tunnel
+	socks   *socks.Server
 	routes  *routes.Pinner
 	traffic trafficSampler
 
+	// raiseMu разводит подъём сети и её снятие. Подъём идёт в отдельной
+	// горутине и занимает секунды; без замка «Отключить», нажатое в
+	// середине, снимало бы ещё не поднятый туннель - и тот оставался бы
+	// жить вместе с раздачей уже после отключения.
+	raiseMu sync.Mutex
+
 	// tunnelErr хранит причину, по которой туннель не поднялся.
 	tunnelErr atomicString
+
+	// socksErr хранит причину, по которой не удалась раздача в локальную
+	// сеть. Она не мешает туннелю работать дальше, поэтому живёт отдельно.
+	socksErr atomicString
 
 	// quitting отличает настоящий выход от закрытия окна в трей.
 	quitting atomic.Bool
@@ -68,7 +81,7 @@ func NewApp(st *settings.Store) (*App, error) {
 		return nil, err
 	}
 
-	a := &App{settings: st, profiles: profiles, tunnel: tunnel.New()}
+	a := &App{settings: st, profiles: profiles, tunnel: tunnel.New(), socks: socks.New()}
 	a.routes = routes.NewPinner(
 		filepath.Join(dataDir, "pinned-routes.json"),
 		func(line string) { a.core.AppendLog("info", line) },
@@ -100,7 +113,7 @@ func NewApp(st *settings.Store) (*App, error) {
 		// Туннель без ядра - чёрная дыра: маршрут по умолчанию ведёт в
 		// адаптер, за которым уже никого нет.
 		if s.State == core.StateFailed || s.State == core.StateStopped {
-			go a.stopTunnel()
+			go a.stopTunnelIfCoreDown()
 		}
 		a.emit(EventCoreState, s)
 		a.updateTray(s)

@@ -18,7 +18,7 @@ import (
 
 // ScriptURL - install.sh ядра. Скрипт не вкомпилирован: так он всегда
 // соответствует текущей версии ядра, а мы не тащим чужой код в свой бинарь.
-const ScriptURL = "https://raw.githubusercontent.com/samosvalishe/free-turn-proxy/master/scripts/install.sh"
+const ScriptURL = "https://github.com/samosvalishe/free-turn-proxy/releases/latest/download/install.sh"
 
 // Client выполняет команды управления сервером.
 type Client struct {
@@ -115,6 +115,11 @@ func (c *Client) Run(ctx context.Context, ssh profile.SSH, args ...string) (Resp
 
 	c.logf("$ install.sh %s", strings.Join(args, " "))
 
+	// Общий предел на команду: без него отказавший сервер держит интерфейс
+	// в ожидании бесконечно, и человеку остаётся только закрыть окно.
+	ctx, cancel := context.WithTimeout(ctx, commandTimeout(args))
+	defer cancel()
+
 	client, err := dial(ctx, ssh)
 	if err != nil {
 		return Response{}, err
@@ -130,6 +135,13 @@ func (c *Client) Run(ctx context.Context, ssh profile.SSH, args ...string) (Resp
 	// Скрипт валится через die, а тот пишет причину в stderr: без него
 	// остаётся голое "unexpected exit 1".
 	resp.Stderr = strings.TrimSpace(errText)
+	// Версию протокола сверяем до разбора data: поля там - контракт, и
+	// чужая версия означает, что мы поняли бы ответ неправильно. Молчать
+	// здесь опаснее всего: ошибка вылезла бы позже и в другом месте.
+	if err := checkProto(resp); err != nil {
+		c.logf("ошибка: %s", err)
+		return errResponse("proto_mismatch", err.Error()), nil
+	}
 	for _, line := range resp.Logs {
 		c.logf("%s", line)
 	}
@@ -140,6 +152,26 @@ func (c *Client) Run(ctx context.Context, ssh profile.SSH, args ...string) (Resp
 		c.logf("ошибка: %s", Explain(resp))
 	}
 	return resp, nil
+}
+
+// Пределы на команду. Установка тянет пакеты и образ docker, поэтому ей
+// нужно много; остальное - это чтение и правка файлов.
+const (
+	defaultTimeout = 3 * time.Minute
+	applyTimeout   = 20 * time.Minute
+)
+
+// commandTimeout выбирает предел по имени подкоманды.
+func commandTimeout(args []string) time.Duration {
+	if len(args) == 0 {
+		return defaultTimeout
+	}
+	switch args[0] {
+	case "apply", "uninstall":
+		return applyTimeout
+	default:
+		return defaultTimeout
+	}
 }
 
 // Probe спрашивает у сервера его состояние.
@@ -155,79 +187,81 @@ func (c *Client) Probe(ctx context.Context, ssh profile.SSH) (ProbeData, Respons
 	return data, resp, err
 }
 
-// InstallOptions - параметры установки и запуска ядра на сервере.
-type InstallOptions struct {
-	// Listen - адрес, который будет слушать сервер (0.0.0.0:56000).
-	Listen string
-	// Connect - локальный бэкенд: WireGuard или Xray.
+// ApplyOptions - параметры установки и запуска сервера.
+//
+// Одна команда apply делает всё: ставит бинарь, поднимает WireGuard,
+// пишет install.conf и запускает службу. Значения, которых нет, скрипт
+// берёт из прошлой установки, поэтому передаём только осмысленные.
+type ApplyOptions struct {
+	// Backend: new - скрипт поднимает свой WireGuard; external - трафик
+	// уходит в чужой VPN по адресу Connect.
+	Backend string
+	// Connect - адрес чужого VPN, только для external.
 	Connect string
-	Mode    string
+	// Host - адрес сервера в выдаваемых ссылках; пусто - внешний IP.
+	Host string
+	// ListenPort - внешний UDP-порт сервера.
+	ListenPort int
+	// WGPort - порт своего WireGuard; 0 - дефолт скрипта.
+	WGPort int
+	Mode   string
 	// ObfProfile и ObfKey обязаны совпасть с клиентскими.
-	ObfProfile  string
-	ObfKey      string
-	ObfTimingMs int
-	// ClientID владельца попадает в allowlist сервера.
-	ClientID string
-	// WithWGPkg разрешает поставить пакет WireGuard, если его нет.
-	WithWGPkg bool
+	ObfProfile string
+	ObfKey     string
+	// Version - версия ядра на сервере; пусто - последняя.
+	Version   string
 	KCP       profile.KCP
 	KCPCustom bool
 }
 
-// Install ставит ядро на сервер.
-func (c *Client) Install(ctx context.Context, ssh profile.SSH, o InstallOptions) (InstallData, Response, error) {
-	args := []string{"install"}
-	if o.WithWGPkg {
-		args = append(args, "--with-wg-pkg")
-	}
-	resp, err := c.Run(ctx, ssh, args...)
+// Apply ставит, настраивает и запускает сервер одной командой.
+func (c *Client) Apply(ctx context.Context, ssh profile.SSH, o ApplyOptions) (ApplyData, Response, error) {
+	resp, err := c.Run(ctx, ssh, ApplyArgs(o)...)
 	if err != nil {
-		return InstallData{}, resp, err
+		return ApplyData{}, resp, err
 	}
-	var data InstallData
+	var data ApplyData
 	if resp.OK() {
 		err = resp.Decode(&data)
 	}
 	return data, resp, err
 }
 
-// WGSetup поднимает на сервере интерфейс WireGuard и возвращает конфиг клиента.
-func (c *Client) WGSetup(ctx context.Context, ssh profile.SSH, port int, endpoint string) (WGSetupData, Response, error) {
-	resp, err := c.Run(ctx, ssh, "wg-setup",
-		"--port="+strconv.Itoa(port), "--endpoint="+endpoint)
-	if err != nil {
-		return WGSetupData{}, resp, err
-	}
-	var data WGSetupData
-	if resp.OK() {
-		err = resp.Decode(&data)
-	}
-	return data, resp, err
-}
-
-// Start запускает серверную часть с нужными параметрами.
-func (c *Client) Start(ctx context.Context, ssh profile.SSH, o InstallOptions) (Response, error) {
-	return c.Run(ctx, ssh, StartArgs(o)...)
-}
-
-// StartArgs собирает аргументы подкоманды start.
+// ApplyArgs собирает аргументы подкоманды apply.
 //
-// Имена ключей - контракт с parse_rpc_args в install.sh; --listen и
-// --connect обязательны, остальное скрипт подставит сам.
-func StartArgs(o InstallOptions) []string {
-	args := []string{"start", "--listen=" + o.Listen, "--connect=" + o.Connect}
+// Имена ключей - контракт с parse_opts в install.sh.
+func ApplyArgs(o ApplyOptions) []string {
+	args := []string{"apply"}
 
+	backend := o.Backend
+	if backend == "" {
+		backend = BackendNew
+	}
+	args = append(args, "--backend="+backend)
+	if backend == BackendExternal && strings.TrimSpace(o.Connect) != "" {
+		args = append(args, "--connect="+strings.TrimSpace(o.Connect))
+	}
+	if host := strings.TrimSpace(o.Host); host != "" {
+		args = append(args, "--host="+host)
+	}
+	if o.ListenPort > 0 {
+		args = append(args, "--listen-port="+strconv.Itoa(o.ListenPort))
+	}
+	// Свой порт WireGuard осмыслен только для своего же бэкенда.
+	if o.WGPort > 0 && backend == BackendNew {
+		args = append(args, "--wg-port="+strconv.Itoa(o.WGPort))
+	}
 	if o.Mode != "" {
 		args = append(args, "--mode="+o.Mode)
 	}
-	if o.ObfProfile != "" && o.ObfProfile != profile.ObfNone {
-		args = append(args, "--obf-profile="+o.ObfProfile, "--obf-key="+o.ObfKey)
-		if o.ObfTimingMs > 0 {
-			args = append(args, "--obf-timing="+strconv.Itoa(o.ObfTimingMs)+"ms")
+	if o.ObfProfile != "" {
+		args = append(args, "--obf-profile="+o.ObfProfile)
+		if o.ObfProfile != profile.ObfNone && o.ObfKey != "" {
+			args = append(args, "--obf-key="+o.ObfKey)
 		}
 	}
-	if o.ClientID != "" {
-		args = append(args, "--client-id="+o.ClientID)
+	if v := strings.TrimSpace(o.Version); v != "" {
+		args = append(args, "--version="+v)
 	}
 	// Профиль ARQ имеет смысл только в tcp и только если он не дефолтный.
 	if o.KCPCustom && o.Mode == profile.ModeTCP {
@@ -251,6 +285,11 @@ func (c *Client) Stop(ctx context.Context, ssh profile.SSH) (Response, error) {
 	return c.Run(ctx, ssh, "stop")
 }
 
+// Restart перезапускает серверную часть, не трогая настройки.
+func (c *Client) Restart(ctx context.Context, ssh profile.SSH) (Response, error) {
+	return c.Run(ctx, ssh, "restart")
+}
+
 // Logs забирает хвост журнала сервера.
 func (c *Client) Logs(ctx context.Context, ssh profile.SSH, lines int) (string, Response, error) {
 	if lines <= 0 {
@@ -264,193 +303,60 @@ func (c *Client) Logs(ctx context.Context, ssh profile.SSH, lines int) (string, 
 	if err := resp.Decode(&data); err != nil {
 		return "", resp, err
 	}
-	return DecodeBase64(data.LogB64), resp, nil
+	return strings.Join(data.Lines, "\n"), resp, nil
 }
 
-// ShareInfo возвращает параметры, которые сервер раздаёт клиентам.
-func (c *Client) ShareInfo(ctx context.Context, ssh profile.SSH) (ShareInfoData, Response, error) {
-	resp, err := c.Run(ctx, ssh, "share-info")
+// ClientList перечисляет выданные доступы и параметры раздачи.
+func (c *Client) ClientList(ctx context.Context, ssh profile.SSH) (ClientListData, Response, error) {
+	resp, err := c.Run(ctx, ssh, "client-list")
 	if err != nil {
-		return ShareInfoData{}, resp, err
+		return ClientListData{}, resp, err
 	}
-	var data ShareInfoData
+	var data ClientListData
 	if resp.OK() {
 		err = resp.Decode(&data)
 	}
 	return data, resp, err
 }
 
-// PeerOptions - параметры нового пира WireGuard.
-type PeerOptions struct {
-	// NameB64 - имя пира в base64; install.sh требует его обязательно.
-	NameB64 string
-	// Endpoint попадает в конфиг клиента. Туда же смотрит и Android-клиент:
-	// это локальный сокет ядра, а не адрес VPS.
-	Endpoint string
-	// ClientID заодно добавляется в allowlist сервера.
-	ClientID string
-	// DNS попадает в конфиг клиента; пусто - сервер подставит свой дефолт.
-	DNS string
+// ClientAdd заводит на сервере новый доступ.
+//
+// Ключи, адрес и Client ID выдаёт сервер, он же собирает готовую ссылку
+// freeturn:// - обмениваться чем-либо вручную не нужно.
+func (c *Client) ClientAdd(ctx context.Context, ssh profile.SSH, name string) (ClientData, Response, error) {
+	return c.clientCmd(ctx, ssh, "client-add", name)
 }
 
-// PeerAdd заводит нового пира WireGuard и возвращает готовый конфиг клиента.
-//
-// Ключи генерирует сервер: он же выделяет адрес, дописывает [Peer] в свою
-// конфигурацию и вкладывает в ответ свой публичный ключ и параметры
-// AmneziaWG. Обмениваться ключами вручную не нужно.
-func (c *Client) PeerAdd(ctx context.Context, ssh profile.SSH, o PeerOptions) (PeerAddData, Response, error) {
-	args := PeerAddArgs(o)
-	resp, err := c.Run(ctx, ssh, args...)
+// ClientConf забирает конфигурацию уже заведённого доступа.
+func (c *Client) ClientConf(ctx context.Context, ssh profile.SSH, name string) (ClientData, Response, error) {
+	return c.clientCmd(ctx, ssh, "client-conf", name)
+}
+
+func (c *Client) clientCmd(ctx context.Context, ssh profile.SSH, cmd, name string) (ClientData, Response, error) {
+	resp, err := c.Run(ctx, ssh, cmd, "--name="+strings.TrimSpace(name))
 	if err != nil {
-		return PeerAddData{}, resp, err
+		return ClientData{}, resp, err
 	}
-	var data PeerAddData
+	var data ClientData
 	if resp.OK() {
 		err = resp.Decode(&data)
 	}
 	return data, resp, err
 }
 
-// PeerAddArgs собирает аргументы подкоманды peer-add.
-func PeerAddArgs(o PeerOptions) []string {
-	endpoint := strings.TrimSpace(o.Endpoint)
-	if endpoint == "" {
-		endpoint = profile.DefaultListen
-	}
-
-	// --name-b64 и --endpoint скрипт требует обязательно.
-	args := []string{"peer-add", "--name-b64=" + o.NameB64, "--endpoint=" + endpoint}
-	if o.ClientID != "" {
-		args = append(args, "--client-id="+o.ClientID)
-	}
-	if dns := strings.TrimSpace(o.DNS); dns != "" {
-		args = append(args, "--dns="+dns)
-	}
-	return args
+// ClientRemove отзывает доступ.
+func (c *Client) ClientRemove(ctx context.Context, ssh profile.SSH, name string) (Response, error) {
+	return c.Run(ctx, ssh, "client-remove", "--name="+strings.TrimSpace(name))
 }
 
-// ClientAdd добавляет client-id в allowlist сервера.
-func (c *Client) ClientAdd(ctx context.Context, ssh profile.SSH, clientID, nameB64 string) (Response, error) {
-	args := []string{"client-add", "--client-id=" + clientID}
-	if nameB64 != "" {
-		args = append(args, "--name-b64="+nameB64)
+// Uninstall удаляет с сервера ядро, WireGuard или всё сразу.
+func (c *Client) Uninstall(ctx context.Context, ssh profile.SSH, target string, purge bool) (Response, error) {
+	if target == "" {
+		target = TargetFreeTurn
+	}
+	args := []string{"uninstall", "--target=" + target}
+	if purge {
+		args = append(args, "--purge")
 	}
 	return c.Run(ctx, ssh, args...)
-}
-
-// Uninstall удаляет ядро с сервера.
-func (c *Client) Uninstall(ctx context.Context, ssh profile.SSH, dryRun bool) (Response, error) {
-	args := []string{"uninstall"}
-	if dryRun {
-		args = append(args, "--dry-run")
-	}
-	return c.Run(ctx, ssh, args...)
-}
-
-// wgToolsScript ставит утилиты WireGuard, если на сервере нет ни awg, ни wg,
-// ни docker.
-//
-// Без них install.sh не может сгенерировать ключи в awg_bootstrap и молча
-// падает с «unexpected exit 1»: генератор ключей у него - это awg, wg или
-// docker, и запасного пути нет. Ключи X25519 у WireGuard и AmneziaWG общие,
-// поэтому wireguard-tools достаточно.
-const wgToolsScript = `set -u
-if command -v awg >/dev/null 2>&1 || command -v wg >/dev/null 2>&1; then
-  echo present
-  exit 0
-fi
-if command -v docker >/dev/null 2>&1; then
-  # У install.sh docker идёт раньше wg, поэтому образ должен быть на месте:
-  # иначе ключи не создаст ни он, ни поставленный рядом wireguard-tools.
-  # Запущенный контейнер AmneziaWG подходит сам по себе - он идёт ещё раньше.
-  if [ "$(docker inspect -f '{{.State.Running}}' freeturn-awg 2>/dev/null || echo false)" = "true" ]; then
-    echo present
-    exit 0
-  fi
-  if docker image inspect ghcr.io/samosvalishe/freeturn-awg:latest >/dev/null 2>&1 \
-     || docker pull ghcr.io/samosvalishe/freeturn-awg:latest >/dev/null 2>&1; then
-    echo present
-    exit 0
-  fi
-  echo "docker-image-missing" >&2
-  exit 4
-fi
-if command -v apt-get >/dev/null 2>&1; then
-  export DEBIAN_FRONTEND=noninteractive
-  apt-get update -qq >/dev/null 2>&1
-  apt-get install -y -qq wireguard-tools >/dev/null 2>&1 || apt-get install -y -qq wireguard >/dev/null 2>&1
-elif command -v dnf >/dev/null 2>&1; then
-  dnf install -y wireguard-tools >/dev/null 2>&1
-elif command -v yum >/dev/null 2>&1; then
-  yum install -y wireguard-tools >/dev/null 2>&1
-elif command -v apk >/dev/null 2>&1; then
-  apk add --no-cache wireguard-tools >/dev/null 2>&1
-elif command -v pacman >/dev/null 2>&1; then
-  pacman -Sy --noconfirm wireguard-tools >/dev/null 2>&1
-else
-  echo "no-package-manager" >&2
-  exit 2
-fi
-if command -v wg >/dev/null 2>&1; then
-  echo installed
-  exit 0
-fi
-echo "install-failed" >&2
-exit 3
-`
-
-// EnsureWGTools проверяет и при необходимости ставит утилиты WireGuard.
-//
-// Возвращает true, если пакет пришлось устанавливать.
-func (c *Client) EnsureWGTools(ctx context.Context, ssh profile.SSH) (bool, error) {
-	c.logf("проверяю утилиты WireGuard на сервере")
-
-	client, err := dial(ctx, ssh)
-	if err != nil {
-		return false, err
-	}
-	defer func() { _ = client.Close() }()
-
-	installed, err := classifyWGTools(runShell(ctx, client, ssh, wgToolsScript))
-	if installed {
-		c.logf("на сервер установлен пакет wireguard-tools")
-	}
-	return installed, err
-}
-
-// classifyWGTools разбирает ответ скрипта проверки утилит WireGuard.
-//
-// Метки скрипт печатает в stdout, а причины отказа - в stderr, куда до них
-// может добавиться и вывод sudo, поэтому ищем вхождение, а не равенство.
-func classifyWGTools(out, errText string, err error) (bool, error) {
-	stdout := strings.TrimSpace(out)
-	stderr := strings.TrimSpace(errText)
-
-	switch {
-	case strings.Contains(stdout, "present"):
-		return false, nil
-	case strings.Contains(stdout, "installed"):
-		return true, nil
-	case strings.Contains(stderr, "no-package-manager"):
-		return false, errors.New("на сервере нет ни awg, ни wg, ни docker, и пакетный менеджер не распознан: " +
-			"поставьте wireguard-tools вручную")
-	case strings.Contains(stderr, "docker-image-missing"):
-		return false, errors.New("на сервере есть docker, но образ AmneziaWG недоступен: " +
-			"install.sh создаёт ключи именно через него. Дайте серверу доступ к ghcr.io " +
-			"или поставьте пакет wireguard-tools и уберите docker из PATH")
-	case strings.Contains(stderr, "install-failed"):
-		return false, errors.New("не удалось поставить wireguard-tools: поставьте пакет вручную и повторите")
-	}
-
-	reason := stderr
-	if err != nil {
-		if reason != "" {
-			reason += ": "
-		}
-		reason += err.Error()
-	}
-	if reason == "" {
-		reason = "сервер ничего не ответил"
-	}
-	return false, errors.New("не удалось проверить утилиты WireGuard на сервере: " + reason)
 }

@@ -60,14 +60,23 @@ func dial(ctx context.Context, cfg profile.SSH) (*ssh.Client, error) {
 		User:            orDefault(cfg.Username, "root"),
 		Auth:            auth,
 		HostKeyCallback: hostKeyCallback(cfg.HostFingerprint, addr),
-		Timeout:         15 * time.Second,
+		Timeout:         connectTimeout,
 	}
 
-	var d net.Dialer
+	// Таймаут нужен на обоих шагах, и оба легко проглядеть.
+	//
+	// Поле Timeout выше работает только когда соединение открывает сам
+	// пакет ssh (ssh.Dial), а мы дозваниваемся своим диалером - значит
+	// рукопожатие им не ограничено. А TCP-подключение без таймаута висит
+	// столько, сколько решит система: файрвол, молча роняющий пакеты
+	// (fail2ban, например), держит его минутами. В интерфейсе это
+	// выглядит как вечно крутящаяся кнопка.
+	d := net.Dialer{Timeout: connectTimeout}
 	conn, err := d.DialContext(ctx, "tcp", addr)
 	if err != nil {
-		return nil, fmt.Errorf("не удалось подключиться к %s: %w", addr, err)
+		return nil, dialError(addr, err)
 	}
+	_ = conn.SetDeadline(handshakeDeadline(ctx))
 
 	c, chans, reqs, err := ssh.NewClientConn(conn, addr, clientCfg)
 	if err != nil {
@@ -84,9 +93,48 @@ func dial(ctx context.Context, cfg profile.SSH) (*ssh.Client, error) {
 		if strings.Contains(err.Error(), "unable to authenticate") {
 			return nil, errors.New("сервер отверг учётные данные: проверьте пользователя, пароль или ключ")
 		}
+		// Рукопожатие, повисшее на чтении, - тот же симптом, что и
+		// неотвеченный connect, и объяснять его надо так же.
+		var ne net.Error
+		if errors.As(err, &ne) && ne.Timeout() {
+			return nil, dialError(addr, err)
+		}
 		return nil, err
 	}
+	// Дальше соединение живёт долго: установка сервера идёт минутами, и
+	// дедлайн рукопожатия её бы оборвал.
+	_ = conn.SetDeadline(time.Time{})
 	return ssh.NewClient(c, chans, reqs), nil
+}
+
+// connectTimeout - предел на TCP-подключение и на рукопожатие SSH.
+const connectTimeout = 15 * time.Second
+
+// handshakeDeadline - когда прекращать ждать рукопожатие. Предел команды
+// может быть ближе нашего, и тогда слушаемся его.
+func handshakeDeadline(ctx context.Context) time.Time {
+	own := time.Now().Add(connectTimeout)
+	if d, ok := ctx.Deadline(); ok && d.Before(own) {
+		return d
+	}
+	return own
+}
+
+// dialError объясняет молчание сервера: чаще всего это не «нет сети», а
+// закрытый порт или блокировка за частые подключения.
+func dialError(addr string, err error) error {
+	var ne net.Error
+	if errors.As(err, &ne) && ne.Timeout() {
+		// Отдельно про штрафы: OpenSSH 9.8 и новее сам придерживает адрес
+		// после череды неудачных подключений (PerSourcePenalties), и со
+		// стороны это выглядит как намертво зависший сервер. Проверять
+		// человеку нечего - нужно просто переждать.
+		return fmt.Errorf("сервер %s не ответил за %s. Проверьте адрес и порт SSH. "+
+			"Если попыток подряд было много, сервер мог сам придержать ваш адрес "+
+			"(в OpenSSH 9.8+ это делает PerSourcePenalties) - подождите несколько "+
+			"минут и повторите", addr, connectTimeout)
+	}
+	return fmt.Errorf("не удалось подключиться к %s: %w", addr, err)
 }
 
 func hostKeyCallback(expected, addr string) ssh.HostKeyCallback {
@@ -257,13 +305,4 @@ func orDefault(v, def string) string {
 		return def
 	}
 	return v
-}
-
-// runShell выполняет произвольный bash-скрипт на сервере с тем же
-// повышением прав, что и install.sh, и сохраняет код возврата: по нему
-// вызывающая сторона отличает «нечего делать» от настоящего отказа.
-func runShell(ctx context.Context, client *ssh.Client, cfg profile.SSH, script string) (stdout, stderr string, err error) {
-	out, errText, err := runAsRoot(ctx, client, cfg, "bash -s", script)
-	password := sudoPassword(cfg)
-	return redact(out, password), redact(errText, password), err
 }

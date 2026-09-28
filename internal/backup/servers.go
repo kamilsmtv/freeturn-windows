@@ -9,13 +9,14 @@ import (
 // Раскладка профиля в бэкапе повторяет ServerJson.kt Android-клиента:
 // имена ключей - контракт совместимости.
 type serverJSON struct {
-	ID           string          `json:"id"`
-	Name         string          `json:"name"`
-	SSH          sshJSON         `json:"ssh"`
-	Client       json.RawMessage `json:"client"`
-	ProxyListen  string          `json:"proxyListen"`
-	ProxyConnect string          `json:"proxyConnect"`
-	Opts         optsJSON        `json:"opts"`
+	ID            string          `json:"id"`
+	Name          string          `json:"name"`
+	SSH           sshJSON         `json:"ssh"`
+	Client        json.RawMessage `json:"client"`
+	ProxyListen   string          `json:"proxyListen"`
+	ProxyConnect  string          `json:"proxyConnect"`
+	ServerBackend string          `json:"serverBackend"`
+	Opts          optsJSON        `json:"opts"`
 }
 
 type sshJSON struct {
@@ -60,7 +61,8 @@ var clientKeys = map[string]bool{
 	"wireGuardTunnelName": true, "splitTunnelMode": true, "logsEnabled": true,
 	"clientId": true,
 	// Ключи, которых в Android нет - они наши собственные.
-	"routes": true, "magicPort": true, "splitTunnelSubnets": true, "subUrl": true,
+	"routes": true, "magicPort": true, "splitTunnelSubnets": true, "subUrl": true, "bond": true,
+	"socksHotspot": true, "socksListen": true, "socksUser": true, "socksPassword": true,
 }
 
 func encodeServers(list []profile.Profile) []serverJSON {
@@ -75,9 +77,10 @@ func encodeServers(list []profile.Profile) []serverJSON {
 				HostFingerprint: p.SSH.HostFingerprint, RootMode: p.SSH.RootMode,
 				SudoPassword: p.SSH.SudoPassword,
 			},
-			Client:       encodeClient(p),
-			ProxyListen:  p.ProxyListen,
-			ProxyConnect: p.ProxyConnect,
+			Client:        encodeClient(p),
+			ProxyListen:   p.ProxyListen,
+			ProxyConnect:  p.ProxyConnect,
+			ServerBackend: p.ServerBackend,
 			Opts: optsJSON{
 				ObfProfile: p.Opts.ObfProfile, ObfKey: p.Opts.ObfKey,
 				ObfTimingMs: p.Opts.ObfTimingMs, ProxyMode: p.Opts.ProxyMode,
@@ -105,6 +108,7 @@ func encodeClient(p profile.Profile) json.RawMessage {
 	obj["threads"] = c.Threads
 	obj["streamsPerCred"] = c.StreamsPerCred
 	obj["useUdp"] = c.UseUDP
+	obj["bond"] = c.Bond
 	obj["manualCaptcha"] = c.ManualCaptcha
 	obj["localPort"] = c.LocalPort
 	obj["debugMode"] = c.DebugMode
@@ -122,6 +126,10 @@ func encodeClient(p profile.Profile) json.RawMessage {
 	obj["routes"] = c.Routes
 	obj["magicPort"] = c.MagicPort
 	obj["splitTunnelSubnets"] = c.SplitTunnelSubnets
+	obj["socksHotspot"] = c.SocksHotspot
+	obj["socksListen"] = c.SocksListen
+	obj["socksUser"] = c.SocksUser
+	obj["socksPassword"] = c.SocksPassword
 	if p.SubURL != "" {
 		obj["subUrl"] = p.SubURL
 	}
@@ -146,6 +154,7 @@ func decodeServers(raw []json.RawMessage) []profile.Profile {
 		}
 		p.ProxyListen = orDefault(s.ProxyListen, p.ProxyListen)
 		p.ProxyConnect = orDefault(s.ProxyConnect, p.ProxyConnect)
+		p.ServerBackend = orDefault(s.ServerBackend, p.ServerBackend)
 		p.SSH = profile.SSH{
 			IP: s.SSH.IP, Port: orDefaultInt(s.SSH.Port, 22),
 			Username: orDefault(s.SSH.Username, "root"), Password: s.SSH.Password,
@@ -188,6 +197,7 @@ func decodeClient(p *profile.Profile, raw json.RawMessage) {
 	get("threads", &c.Threads)
 	get("streamsPerCred", &c.StreamsPerCred)
 	get("useUdp", &c.UseUDP)
+	get("bond", &c.Bond)
 	get("manualCaptcha", &c.ManualCaptcha)
 	get("localPort", &c.LocalPort)
 	get("debugMode", &c.DebugMode)
@@ -204,6 +214,10 @@ func decodeClient(p *profile.Profile, raw json.RawMessage) {
 	get("logsEnabled", &c.LogsEnabled)
 	get("clientId", &c.ClientID)
 	get("routes", &c.Routes)
+	get("socksHotspot", &c.SocksHotspot)
+	get("socksListen", &c.SocksListen)
+	get("socksUser", &c.SocksUser)
+	get("socksPassword", &c.SocksPassword)
 	get("subUrl", &p.SubURL)
 
 	// Всё, чего наша модель не знает, сохраняем как есть.
@@ -229,6 +243,15 @@ func decodeClient(p *profile.Profile, raw json.RawMessage) {
 	}
 	if c.LocalPort == "" {
 		c.LocalPort = profile.DefaultListen
+	}
+	if c.SocksListen == "" {
+		c.SocksListen = profile.DefaultSocksListen
+	}
+	// Раздача без логина и пароля к запуску не допускается, а в чужом
+	// бэкапе их может не быть вовсе. Выключаем: иначе импортированный
+	// профиль молча отказывался бы подключаться.
+	if c.SocksUser == "" || c.SocksPassword == "" {
+		c.SocksHotspot = false
 	}
 	if c.DNSMode == "" {
 		c.DNSMode = profile.DNSAuto

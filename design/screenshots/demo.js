@@ -14,8 +14,9 @@
                 dnsMode: "system", customDns: "", platform: "desktop", magicSwitch: false, magicTurn: "", magicPort: "",
                 routes: true, tunnelTransport: vpn ? "wireguard" : "none", wireGuardConfig: vpn ? "[Interface]" : "",
                 wireGuardTunnelName: "freeturn-wg", splitTunnelMode: "off", splitTunnelSubnets: "", logsEnabled: true,
+                socksHotspot: vpn, socksListen: "0.0.0.0:1080", socksUser: "kamil", socksPassword: "demo",
                 clientId: "c64a26ffcfd0540cecfd6fa2dbade293" },
-      proxyListen: "0.0.0.0:56000", proxyConnect: "127.0.0.1:51820",
+      proxyListen: "0.0.0.0:56000", proxyConnect: "127.0.0.1:51820", serverBackend: "new",
       opts: { obfProfile: obf, obfKey: "a".repeat(64), obfTimingMs: 0, proxyMode: "udp", kcp: kcp },
       subUrl: sub ? "https://example.com/sub" : undefined,
     };
@@ -45,9 +46,12 @@
   });
 
   var probe = {
-    installed: true, version: "v3.4.0", running: true, mode: "udp", obf: "rtpopus", runtime: "systemd", euid: 0,
-    wg: { present: true, port: 51820 }, virt: "kvm", wg_kernel: true,
-    conflicts: { warp: false, x3ui: true, wgeasy: false, tailscale: false, other_ifaces: null },
+    installed: true, running: true, euid: 0, arch: "x86_64", method: "docker", version: "v4.0.1",
+    config: {
+      method: "docker", backend: "new", connect: "", host: "203.0.113.10", listen_port: 56000,
+      wg_port: 51820, wg_net: "10.13.13.0/24", mode: "udp", obf_profile: "rtpopus3",
+      obf_key: "a".repeat(64), version: "v4.0.1",
+    },
   };
 
   var settings = {
@@ -91,19 +95,50 @@
     Profiles: ok({ list: list, activeId: "nl01" }),
     TrafficStats: ok({ available: true, adapter: "freeturn-wg", rxBytes: 193273528, txBytes: 1503238553, reason: "", rxRate: 0, txRate: 0 }),
     TunnelStatus: ok({ enabled: true, up: true, adapter: "freeturn-wg", error: "" }),
+    SocksStatus: ok({ enabled: true, up: true, addr: "0.0.0.0:1080", hints: ["192.168.1.42:1080"], active: 2, error: "" }),
     UpdateStatus: ok({ installed: true, version: "v3.4.0", latestVersion: "v3.4.0", updateReady: false, changelog: "",
                        releaseUrl: "", canRollback: true, rollbackTarget: "v3.3.1", checkedAt: new Date().toISOString(), error: "" }),
     CheckGUIUpdate: ok({ current: "0.1.0", latest: "0.1.0", updateReady: false, changelog: "", releaseUrl: "", checkedAt: "", error: "" }),
     VPSProbe: ok({ ok: true, fingerprint: "", error: "", probe: probe }),
+    VPSApply: ok({ ok: true, fingerprint: "", error: "",
+      text: "Сервер установлен и запущен, конфигурация владельца сохранена в профиль",
+      profile: profile("new", "Мой сервер", "203.0.113.10:56000", "rtpopus3", true, false) }),
+    VPSImportParams: ok({ ok: true, fingerprint: "", error: "", text: "Параметры сервера перенесены в профиль" }),
+    VPSClients: ok({
+      clients: [
+        { name: "owner", client_id: "e55d1e77", self: true, ip: "10.13.13.2", pub: "t9q2", hs: Math.floor(Date.now() / 1000) - 240 },
+        { name: "phone", client_id: "6b9d57ae", self: false, ip: "10.13.13.3", pub: "wBEs", hs: 0 },
+      ],
+      share: { backend: "new", host: "203.0.113.10", port: 56000, mode: "udp", obf_profile: "rtpopus3", obf_key: "a".repeat(64) },
+    }),
     ExportLink: function (id, includeVK) {
       return Promise.resolve(DEMO_LINK + (includeVK ? "LnZrLnJ1L2NhbGwvam9pbi9FWEFNUExF" : ""));
     },
+    Downloads: ok([
+      { title: "Ядро free-turn-proxy", hint: "Без него приложение не подключится. Укажите кнопкой «Выбрать файл» в карточке ядра.",
+        url: "https://github.com/samosvalishe/free-turn-proxy/releases/latest/download/client-windows-amd64.exe",
+        dir: "C:\\Users\\User\\AppData\\Local\\FreeTurn\\core", optional: false },
+      { title: "Контрольные суммы ядра", hint: "Не обязателен. Положите рядом со скачанным ядром - приложение сверит файл по сумме.",
+        url: "https://github.com/samosvalishe/free-turn-proxy/releases/latest/download/checksums.txt",
+        dir: "C:\\Users\\User\\AppData\\Local\\FreeTurn\\core", optional: true },
+      { title: "Компонент сетевого адаптера (wintun 0.14.1)", hint: "Нужен только в режиме VPN. Подойдёт и архив, и распакованная wintun.dll.",
+        url: "https://www.wintun.net/builds/wintun-0.14.1.zip",
+        dir: "C:\\Users\\User\\AppData\\Local\\FreeTurn\\bin", optional: false },
+      { title: "Само приложение FreeTurn", hint: "Страница релизов: оттуда берутся обновления окна.",
+        url: "https://github.com/kamilsmtv/freeturn-windows/releases/latest", dir: "", optional: false },
+    ]),
     QRCode: function (text) {
       var modules = text.length > 90 ? 89 : 65;
       return Promise.resolve({ uri: qrDataURI(modules), modules: modules });
     },
+    NewProfile: function (name) { return Promise.resolve(profile("new", name, "203.0.113.10:56000", "rtpopus3", true, false)); },
+    SaveProfile: function (p) { return Promise.resolve(p); },
+    DeleteProfile: ok(undefined),
+    SetActiveProfile: ok(undefined),
     GenerateClientID: ok("c64a26ffcfd0540cecfd6fa2dbade293"),
     WintunInstalled: ok(true),
+    WintunSourceURL: ok("https://www.wintun.net/builds/wintun-0.14.1.zip"),
+    CoreAssetName: ok("client-windows-amd64.exe"),
   } } };
 
   // Публичные адреса на снимках размываем: даже демонстрационные IP выглядят

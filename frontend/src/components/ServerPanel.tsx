@@ -1,7 +1,16 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { backend, EVENTS, onEvent, type Profile, type ProbeData, type VPSResult } from "../lib/api";
+import {
+  backend,
+  EVENTS,
+  onEvent,
+  type Profile,
+  type ProbeData,
+  type VPSClient,
+  type VPSResult,
+} from "../lib/api";
 import { Button, Spinner } from "./ui";
 import { Field, NumberInput, Picker, TextArea, TextInput } from "./Field";
+import { validClientName } from "../lib/format";
 import { useBusyWhile } from "../lib/busy";
 import { guard } from "../lib/effect";
 import { QRCode } from "./QRCode";
@@ -9,7 +18,7 @@ import { QRCode } from "./QRCode";
 /**
  * Управление сервером по SSH. Все команды идут через install.sh ядра:
  * скрипт скачивается приложением и передаётся на stdin bash, обратно
- * приходит один JSON-объект (протокол v2 самого install.sh).
+ * приходит один JSON-объект (протокол v3 самого install.sh).
  *
  * Экран собран как в макете: слева — «Настройка» с шагами сверху вниз,
  * справа — состояние сервера, предупреждения и ход выполнения команд.
@@ -25,6 +34,10 @@ export function ServerPanel({ profile, onProfile }: { profile: Profile; onProfil
   const [saved, setSaved] = useState(true);
   const [share, setShare] = useState("");
   const [peerName, setPeerName] = useState("");
+  const [clients, setClients] = useState<VPSClient[] | null>(null);
+  // Ссылка уже заведённого гостя: завести второй раз сервер не даёт, а
+  // показать выданное раньше было нечем.
+  const [peerLink, setPeerLink] = useState<{ name: string; url: string } | null>(null);
   // Форма доступа занимает пол-экрана, поэтому у подтверждённого сервера
   // она свёрнута: разворачиваем по клику, как в макете.
   const [sshOpen, setSshOpen] = useState(!profile.ssh.hostFingerprint);
@@ -35,10 +48,18 @@ export function ServerPanel({ profile, onProfile }: { profile: Profile; onProfil
     onEvent<string>(EVENTS.vpsLog, (l) => setLog((prev) => [...prev.slice(-400), l])),
   ), []);
   // Смена активного профиля должна подхватываться формой доступа.
+  //
+  // Заодно сбрасываем всё, что относится к прежнему серверу: список
+  // доступов и ссылка гостя от другого сервера - это не просто мусор на
+  // экране, по ним можно раздать доступ не туда.
   useEffect(() => guard("ServerPanel/profile", () => {
     setDraft(profile);
     setSaved(true);
     setSshOpen(!profile.ssh.hostFingerprint);
+    setProbe(null);
+    setClients(null);
+    setShare("");
+    setPeerName("");
   }), [profile.id]);
   // Команды меняют профиль на бэкенде (порт бэкенда, конфиг WireGuard):
   // подхватываем новую версию, пока в форме нет несохранённых правок.
@@ -57,12 +78,40 @@ export function ServerPanel({ profile, onProfile }: { profile: Profile; onProfil
 
   // Молчаливый опрос: обновляет состояние и шаги, но не трогает
   // сообщения об ошибках - иначе он затирал бы результат самой команды.
+  //
+  // Заодно подтягиваем список выданных доступов. Раньше он ждал нажатия
+  // кнопки, и шаг выглядел пустым - человек не догадывался, что список
+  // вообще существует, и спрашивал, где посмотреть, кому он раздал доступ.
   const refreshProbe = async () => {
     try {
       const r = await api?.VPSProbe(profile.id);
-      if (r?.ok && r.probe) setProbe(r.probe);
+      if (r?.ok && r.probe) {
+        setProbe(r.probe);
+        if (r.probe.installed) {
+          try {
+            const list = await api?.VPSClients(profile.id);
+            setClients(list?.clients ?? []);
+          } catch {
+            // Список - дополнение к состоянию, без него вкладка работает.
+          }
+        }
+      }
     } catch {
       // Молчим намеренно: это фоновая проверка, а не действие пользователя.
+    }
+  };
+
+  // Обновление списка по кнопке: после выдачи или отзыва доступа.
+  const refreshClients = async () => {
+    setError("");
+    setBusy("clients");
+    try {
+      const r = await api?.VPSClients(profile.id);
+      setClients(r?.clients ?? []);
+    } catch (e) {
+      setError(String(e));
+    } finally {
+      setBusy("");
     }
   };
 
@@ -149,12 +198,15 @@ export function ServerPanel({ profile, onProfile }: { profile: Profile; onProfil
   // несохранённое становится невозможно.
   const canSave = idle && !saved;
   const disabled = !idle || !ready;
+  // Режим проброса tcp решает за пользователя: свой WireGuard скрипт
+  // поднимает только для udp, и выбор тут ни на что не влияет.
+  const external = draft.serverBackend === "external" || draft.opts.proxyMode === "tcp";
 
   const access = `${draft.ssh.username || "root"}@${draft.ssh.ip}:${draft.ssh.port || 22}`;
   const subtitle = [
     draft.ssh.ip.trim() || "адрес не задан",
     probe ? (probe.installed ? `ядро ${probe.version || "?"} ${probe.running ? "работает" : "остановлено"}` : "ядро не установлено") : "состояние неизвестно",
-    probe?.runtime || "",
+    probe?.method || "",
   ]
     .filter(Boolean)
     .join(" · ");
@@ -276,9 +328,6 @@ export function ServerPanel({ profile, onProfile }: { profile: Profile; onProfil
                   <Field label="Адрес прослушивания сервера" hint="Флаг -listen серверной части">
                     <TextInput value={draft.proxyListen} onChange={(proxyListen) => patchProfile({ proxyListen })} />
                   </Field>
-                  <Field label="Локальный бэкенд на сервере" hint="Флаг -connect: WireGuard 51820, Xray 443">
-                    <TextInput value={draft.proxyConnect} onChange={(proxyConnect) => patchProfile({ proxyConnect })} />
-                  </Field>
                 </div>
 
                 {draft.ssh.authType === "SSH_KEY" && (
@@ -302,64 +351,163 @@ export function ServerPanel({ profile, onProfile }: { profile: Profile; onProfil
           </Step>
 
           <Step
-            done={Boolean(probe?.installed)}
-            title={probe?.installed ? "Ядро установлено" : "Установить ядро"}
+            done
+            title="Куда идёт трафик"
             hint={
-              probe?.installed
-                ? `${probe.version || "версия неизвестна"} · ${probe.running ? "служба работает" : "служба остановлена"}`
-                : "install.sh соберёт и поставит серверную часть free-turn-proxy"
+              external
+                ? "FreeTurn только передаёт трафик в ваш VPN и сам его не трогает"
+                : "Установщик поднимет WireGuard (ft-wg0) и сам выпустит конфигурации"
             }
           >
-            <div className="pt-2">
-              <Button
-                variant="primary"
-                disabled={disabled}
-                onClick={() => run("install", () => api!.VPSInstall(profile.id, true))}
-                busy={busy === "install"}
-              >
-                {busy === "install" ? "Устанавливаю…" : probe?.installed ? "Переустановить" : "Установить ядро"}
-              </Button>
+            <div className="flex flex-col gap-3 pt-2 md:max-w-lg">
+              {/* В режиме проброса tcp выбора нет: свой WireGuard скрипт
+                  поднимает только для udp. Показывать при этом список,
+                  который всё равно не слушается, - обман. */}
+              {draft.opts.proxyMode === "tcp" ? (
+                <Field
+                  label="VPN на сервере"
+                  hint="Режим туннеля tcp работает только поверх своего VPN — выбора нет"
+                >
+                  <div className="flex h-[42px] items-center rounded-lg border border-zinc-300 px-3.5 text-sm text-zinc-500 dark:border-zinc-700 dark:text-zinc-400">
+                    Мой VPN (3x-ui, Xray, sing-box)
+                  </div>
+                </Field>
+              ) : (
+                <Field label="VPN на сервере">
+                  <Picker
+                    value={draft.serverBackend === "external" ? "external" : "new"}
+                    onChange={(serverBackend) => patchProfile({ serverBackend })}
+                    options={[
+                      { value: "new", label: "Поднять WireGuard силами FreeTurn" },
+                      { value: "external", label: "Мой VPN (3x-ui, Amnezia, wg-easy, Xray)" },
+                    ]}
+                  />
+                </Field>
+              )}
+
+              {external ? (
+                <>
+                  <Field
+                    label="Адрес своего VPN на сервере"
+                    hint="Флаг -connect: у 3x-ui и Xray обычно 127.0.0.1:443, у WireGuard 127.0.0.1:51820"
+                  >
+                    <TextInput
+                      value={draft.proxyConnect}
+                      onChange={(proxyConnect) => patchProfile({ proxyConnect })}
+                      placeholder="127.0.0.1:443"
+                    />
+                  </Field>
+                  <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                    Клиентские конфигурации берите в панели своего VPN: FreeTurn своих ключей не
+                    выдаёт никому, включая вас. На этой машине понадобится клиент того же
+                    протокола — например v2rayN для 3x-ui.
+                  </p>
+
+                  {/* Скрипт не даёт сменить бэкенд, пока его WireGuard на месте. */}
+                  {probe?.config?.backend === "new" && (
+                    <div className="flex flex-col gap-2 rounded-xl border border-amber-300 bg-amber-50 p-3 dark:border-[#422006] dark:bg-[#1c1917]">
+                      <span className="text-xs text-amber-900 dark:text-amber-300">
+                        На сервере поднят WireGuard от FreeTurn — пока он есть, трафик в ваш VPN не
+                        уйдёт. Удалить его вместе с выданными им конфигурациями?
+                      </span>
+                      <div>
+                        <Button
+                          disabled={disabled}
+                          busy={busy === "dropwg"}
+                          onClick={() => run("dropwg", () => api!.VPSRemoveWireGuard(profile.id))}
+                        >
+                          {busy === "dropwg" ? "Удаляю…" : "Удалить наш WireGuard с сервера"}
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+                </>
+              ) : (
+                <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                  Конфигурации выпустит сам сервер — и вам, и тем, с кем поделитесь. Уже
+                  работающий на сервере VPN при этом не трогается.
+                </p>
+              )}
+
+              <div>
+                <Button variant={saved ? "default" : "primary"} disabled={!canSave} onClick={saveDraft}>
+                  {saved ? "Сохранено" : "Сохранить"}
+                </Button>
+              </div>
             </div>
           </Step>
 
           <Step
-            done={Boolean(probe?.wg.present)}
-            title={probe?.wg.present ? "WireGuard настроен" : "Настроить WireGuard"}
+            done={Boolean(probe?.installed)}
+            title={probe?.installed ? "Сервер установлен" : "Установить и запустить"}
             hint={
-              probe?.wg.present
-                ? `порт ${probe.wg.port}${probe.wg_kernel ? ", модуль ядра" : ""} · конфигурация клиента в профиле`
-                : "Сервер заведёт интерфейс и отдаст конфигурацию клиента; если утилит wg нет, приложение поставит wireguard-tools"
+              probe?.installed
+                ? `${probe.version || "версия неизвестна"} · ${probe.running ? "служба работает" : "служба остановлена"}` +
+                  `${probe.config?.backend === "new" ? " · WireGuard поднят скриптом" : ""}`
+                : "Одна команда ставит ядро, поднимает WireGuard и отдаёт конфигурацию владельца в профиль"
             }
           >
-            <div className="flex flex-wrap gap-2 pt-1">
+            <div className="flex flex-wrap gap-2 pt-2">
               <Button
+                variant="primary"
                 disabled={disabled}
-                busy={busy === "share"}
-                onClick={() => run("share", () => api!.VPSImportShareInfo(profile.id))}
+                onClick={() => run("apply", () => api!.VPSApply(profile.id))}
+                busy={busy === "apply"}
               >
-                {busy === "share" ? "Спрашиваю сервер…" : "Забрать параметры подключения"}
+                {busy === "apply"
+                  ? "Настраиваю…"
+                  : probe?.installed
+                    ? "Применить настройки заново"
+                    : "Установить и запустить"}
               </Button>
               <Button
                 disabled={disabled}
-                busy={busy === "wg"}
-                onClick={() => run("wg", () => api!.VPSSetupWireGuard(profile.id))}
+                busy={busy === "params"}
+                onClick={() => run("params", () => api!.VPSImportParams(profile.id))}
               >
-                {busy === "wg" ? "Настраиваю…" : "Настроить WireGuard и забрать конфиг"}
+                {busy === "params" ? "Спрашиваю сервер…" : "Забрать параметры подключения"}
               </Button>
+              {!external && (
+                <Button
+                  disabled={disabled}
+                  busy={busy === "wg"}
+                  onClick={() => run("wg", () => api!.VPSFetchWGConfig(profile.id))}
+                >
+                  {busy === "wg" ? "Забираю…" : "Забрать конфигурацию владельца"}
+                </Button>
+              )}
             </div>
+
           </Step>
 
           <Step
             done={false}
             title="Пригласить гостя"
-            hint="Сервер заведёт пира и отдаст готовую ссылку"
+            hint={
+              external
+                ? "Сервер заведёт доступ и выдаст Client ID, но своих ключей у него нет"
+                : "Сервер заведёт доступ, выдаст Client ID и соберёт готовую ссылку"
+            }
           >
             <div className="flex flex-col gap-2 pt-2">
+              {/* При своём VPN ссылка неполная, и узнать это после отправки
+                  гостю - худший момент из возможных. */}
+              {external && (
+                <p className="rounded-lg bg-amber-100 px-3 py-2 text-xs text-amber-900 dark:bg-amber-950 dark:text-amber-200">
+                  Трафик уходит в ваш VPN, поэтому в ссылке будут только адрес сервера, обфускация
+                  и Client ID — без конфигурации WireGuard. Гостю отдельно нужен доступ к самому
+                  VPN: например, ссылка из 3x-ui. Одной этой ссылки ему не хватит.
+                </p>
+              )}
               <div className="flex items-center gap-2">
-                <TextInput value={peerName} onChange={setPeerName} placeholder="Имя гостя" />
+                <TextInput
+                  value={peerName}
+                  onChange={setPeerName}
+                  placeholder="Имя гостя, латиницей"
+                />
                 <Button
                   variant="primary"
-                  disabled={disabled || !peerName.trim()}
+                  disabled={disabled || !validClientName(peerName)}
                   busy={busy === "peer"}
                   onClick={async () => {
                     setError("");
@@ -376,6 +524,12 @@ export function ServerPanel({ profile, onProfile }: { profile: Profile; onProfil
                   Создать ссылку
                 </Button>
               </div>
+              {peerName.trim() !== "" && !validClientName(peerName) && (
+                <span className="text-xs text-amber-700 dark:text-amber-500">
+                  Сервер принимает только латиницу, цифры, точку, дефис и подчёркивание — до 32
+                  символов, первым идёт буква или цифра
+                </span>
+              )}
               {share && (
                 <>
                   <pre className="scroll selectable max-h-28 overflow-auto rounded-lg bg-zinc-950 p-3 font-mono text-xs text-zinc-300">
@@ -387,6 +541,116 @@ export function ServerPanel({ profile, onProfile }: { profile: Profile; onProfil
                     <Button onClick={() => navigator.clipboard.writeText(share)}>Скопировать ссылку</Button>
                   </div>
                 </>
+              )}
+            </div>
+          </Step>
+
+          <Step
+            done={Boolean(clients && clients.length > 0)}
+            title="Кому выдан доступ"
+            hint={
+              clients
+                ? `Всего ${plural(clients.length)} · сервер помнит, кому выдана конфигурация и когда тот выходил на связь`
+                : "Сервер помнит, кому выдана конфигурация и когда тот выходил на связь"
+            }
+          >
+            <div className="flex flex-col gap-2 pt-2">
+              {clients === null && (
+                <span className="text-xs text-zinc-500 dark:text-zinc-400">
+                  Список появится после проверки сервера
+                </span>
+              )}
+
+              {clients?.length === 0 && (
+                <span className="text-xs text-zinc-500 dark:text-zinc-400">
+                  Сервер не выдал ни одного доступа
+                </span>
+              )}
+
+              {clients?.map((c) => (
+                <div
+                  key={c.name}
+                  className="flex items-center gap-2 rounded-lg border border-zinc-200 px-3 py-2 dark:border-zinc-800"
+                >
+                  {/* Имя и адрес - в столбик, кнопки - справа. Одной
+                      строкой кнопки вытесняли имя до нуля: flex-1 отдаёт
+                      место тому, что не сжимается, и truncate обрезал его
+                      целиком. */}
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate text-[13px]">
+                      {c.name}
+                      {c.self && <span className="ml-2 text-xs text-emerald-600">это вы</span>}
+                    </div>
+                    {/* При своём VPN сервер не выдаёт ни адреса, ни ключей:
+                        доступ там - это только Client ID в allowlist. */}
+                    <div className="text-xs text-zinc-500 dark:text-zinc-400">
+                      {c.pub ? (
+                        <>
+                          <span className="font-mono">{c.ip}</span> · {handshake(c.hs)}
+                        </>
+                      ) : (
+                        "только Client ID"
+                      )}
+                    </div>
+                  </div>
+                  {!c.self && (
+                    <div className="flex shrink-0 gap-2">
+                      <Button
+                        disabled={disabled}
+                        busy={busy === "link-" + c.name}
+                        onClick={async () => {
+                          setError("");
+                          setBusy("link-" + c.name);
+                          try {
+                            const url = await api!.VPSPeerLink(profile.id, c.name);
+                            setPeerLink({ name: c.name, url });
+                          } catch (e) {
+                            setError(String(e));
+                          } finally {
+                            setBusy("");
+                          }
+                        }}
+                      >
+                        Ссылка
+                      </Button>
+                      <Button
+                        disabled={disabled}
+                        busy={busy === "drop-" + c.name}
+                        onClick={async () => {
+                          await run("drop-" + c.name, () => api!.VPSRemovePeer(profile.id, c.name));
+                          setPeerLink(null);
+                          await refreshClients();
+                        }}
+                      >
+                        Отозвать
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              ))}
+
+              <div className="pt-1">
+                <Button disabled={disabled} busy={busy === "clients"} onClick={refreshClients}>
+                  {busy === "clients" ? "Спрашиваю сервер…" : "Обновить список"}
+                </Button>
+              </div>
+
+              {peerLink && (
+                <div className="flex flex-col gap-2 rounded-xl border border-emerald-300 bg-emerald-50 p-3 dark:border-emerald-900 dark:bg-emerald-950/30">
+                  <span className="text-[13px] font-medium">Ссылка для «{peerLink.name}»</span>
+                  <QRCode text={peerLink.url} name={peerLink.name} />
+                  <pre className="scroll selectable max-h-24 overflow-auto rounded-lg bg-zinc-950 p-2 font-mono text-xs text-zinc-300">
+                    {peerLink.url}
+                  </pre>
+                  <div className="flex gap-2">
+                    <Button onClick={() => navigator.clipboard.writeText(peerLink.url).catch(() => {})}>
+                      Скопировать
+                    </Button>
+                    <Button variant="ghost" onClick={() => setPeerLink(null)}>
+                      Скрыть
+                    </Button>
+                  </div>
+                </div>
               )}
             </div>
           </Step>
@@ -419,10 +683,10 @@ export function ServerPanel({ profile, onProfile }: { profile: Profile; onProfil
             <div className="flex items-center gap-2.5 pt-1">
               <Button
                 disabled={disabled}
-                busy={busy === "start"}
-                onClick={() => run("start", () => api!.VPSStart(profile.id))}
+                busy={busy === "restart"}
+                onClick={() => run("restart", () => api!.VPSRestart(profile.id))}
               >
-                {busy === "start" ? "Запускаю…" : probe?.running ? "Перезапустить" : "Запустить"}
+                {busy === "restart" ? "Перезапускаю…" : "Перезапустить"}
               </Button>
               <Button
                 disabled={disabled}
@@ -470,29 +734,12 @@ export function ServerPanel({ profile, onProfile }: { profile: Profile; onProfil
             </div>
           )}
 
-          {probe && conflicts(probe).length > 0 && (
-            <div className="flex items-start gap-2.5 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3.5 dark:border-[#422006] dark:bg-[#1c1917]">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" className="mt-px shrink-0 text-amber-500">
-                <path d="M12 9v4M12 17h.01" />
-                <path d="M10.3 3.9 2.6 17.2A1.9 1.9 0 0 0 4.3 20h15.4a1.9 1.9 0 0 0 1.7-2.8L13.7 3.9a1.9 1.9 0 0 0-3.4 0z" />
-              </svg>
-              <div className="flex flex-col gap-0.5">
-                <span className="text-[13px] text-amber-900 dark:text-amber-300">
-                  На сервере найдено: {conflicts(probe).join(", ")}
-                </span>
-                <span className="text-xs text-amber-800 dark:text-zinc-400">
-                  Может занимать порты и свои интерфейсы — если появятся странности с портами, начните с этого
-                </span>
-              </div>
-            </div>
-          )}
-
           <section className="flex flex-col gap-2.5 rounded-2xl border border-zinc-200 bg-white p-[18px] dark:border-zinc-800 dark:bg-[#0c0c0e]">
             <div className="flex items-center gap-2">
               <h2 className="flex-1 text-[13px] font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
                 Ход выполнения
               </h2>
-              <span className="text-xs text-zinc-400 dark:text-zinc-600">install.sh · протокол v2</span>
+              <span className="text-xs text-zinc-400 dark:text-zinc-600">install.sh · протокол v3</span>
             </div>
             <div
               ref={logBox}
@@ -525,6 +772,30 @@ export function ServerPanel({ profile, onProfile }: { profile: Profile; onProfil
 }
 
 /** Шаг настройки: галочка и зелёный фон, когда он уже пройден. */
+/** «3 доступа» вместо «3 доступ». */
+function plural(n: number): string {
+  const forms = ["доступ", "доступа", "доступов"];
+  const mod100 = n % 100;
+  const mod10 = n % 10;
+  let form = forms[2];
+  if (mod100 < 11 || mod100 > 14) {
+    if (mod10 === 1) form = forms[0];
+    else if (mod10 >= 2 && mod10 <= 4) form = forms[1];
+  }
+  return `${n} ${form}`;
+}
+
+/** Когда доступ последний раз выходил на связь; 0 — ни разу. */
+function handshake(hs: number): string {
+  if (!hs) return "не подключался";
+  const mins = Math.round((Date.now() / 1000 - hs) / 60);
+  if (mins < 1) return "только что";
+  if (mins < 60) return `${mins} мин назад`;
+  const hours = Math.round(mins / 60);
+  if (hours < 24) return `${hours} ч назад`;
+  return `${Math.round(hours / 24)} дн назад`;
+}
+
 function Step({
   done,
   title,
@@ -607,12 +878,3 @@ function HeaderButton({
   );
 }
 
-function conflicts(p: ProbeData): string[] {
-  const out: string[] = [];
-  if (p.conflicts.warp) out.push("Cloudflare WARP");
-  if (p.conflicts.x3ui) out.push("3x-ui");
-  if (p.conflicts.wgeasy) out.push("wg-easy");
-  if (p.conflicts.tailscale) out.push("Tailscale");
-  for (const i of p.conflicts.other_ifaces ?? []) out.push(`интерфейс ${i}`);
-  return out;
-}

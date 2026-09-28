@@ -119,6 +119,7 @@ export type Profile = {
     threads: number;
     streamsPerCred: number;
     useUdp: boolean;
+    bond: boolean;
     manualCaptcha: boolean;
     localPort: string;
     debugMode: boolean;
@@ -134,11 +135,17 @@ export type Profile = {
     wireGuardTunnelName: string;
     splitTunnelMode: string;
     splitTunnelSubnets: string;
+    socksHotspot: boolean;
+    socksListen: string;
+    socksUser: string;
+    socksPassword: string;
     logsEnabled: boolean;
     clientId: string;
   };
   proxyListen: string;
   proxyConnect: string;
+  /** Что стоит за релеем на сервере: свой WireGuard или чужой VPN. */
+  serverBackend: string;
   opts: {
     obfProfile: string;
     obfKey: string;
@@ -173,6 +180,8 @@ type Backend = {
   CheckCoreUpdate(): Promise<UpdateStatus>;
   InstallCore(): Promise<UpdateStatus>;
   RollbackCore(): Promise<UpdateStatus>;
+  ImportCore(): Promise<UpdateStatus>;
+  CoreAssetName(): Promise<string>;
   CheckGUIUpdate(): Promise<GUIStatus>;
   Profiles(): Promise<Snapshot>;
   NewProfile(name: string): Promise<Profile>;
@@ -204,19 +213,35 @@ type Backend = {
   QuitApp(): Promise<void>;
   ConnectActive(): Promise<void>;
   VPSProbe(id: string): Promise<VPSResult>;
-  VPSInstall(id: string, withWgPkg: boolean): Promise<VPSResult>;
-  VPSStart(id: string): Promise<VPSResult>;
+  VPSApply(id: string): Promise<VPSResult>;
+  VPSRestart(id: string): Promise<VPSResult>;
   VPSStop(id: string): Promise<VPSResult>;
   VPSLogs(id: string, lines: number): Promise<VPSResult>;
-  VPSSetupWireGuard(id: string): Promise<VPSResult>;
   VPSFetchWGConfig(id: string): Promise<VPSResult>;
-  VPSImportShareInfo(id: string): Promise<VPSResult>;
+  VPSImportParams(id: string): Promise<VPSResult>;
   VPSAddPeer(id: string, name: string): Promise<string>;
+  VPSClients(id: string): Promise<VPSClientList>;
+  VPSRemovePeer(id: string, name: string): Promise<VPSResult>;
+  VPSPeerLink(id: string, name: string): Promise<string>;
+  VPSRemoveWireGuard(id: string): Promise<VPSResult>;
   TrustHostKey(id: string, fingerprint: string): Promise<void>;
   TunnelStatus(): Promise<TunnelStatus>;
+  SocksStatus(): Promise<SocksStatus>;
   WintunInstalled(): Promise<boolean>;
   EnsureWintun(): Promise<void>;
+  ImportWintun(): Promise<void>;
+  WintunSourceURL(): Promise<string>;
+  Downloads(): Promise<DownloadLink[]>;
   GenerateWGConfig(profileId: string): Promise<WGTemplate>;
+};
+
+/** Адрес файла, который можно принести руками, когда сеть его не отдаёт. */
+export type DownloadLink = {
+  title: string;
+  hint: string;
+  url: string;
+  dir: string;
+  optional: boolean;
 };
 
 export type WGTemplate = {
@@ -232,23 +257,59 @@ export type TunnelStatus = {
   error: string;
 };
 
+export type SocksStatus = {
+  enabled: boolean;
+  up: boolean;
+  addr: string;
+  /** Адреса машины в локальной сети - их и передают соседу. */
+  hints: string[] | null;
+  active: number;
+  error: string;
+};
+
 export type ProbeData = {
   installed: boolean;
-  version: string;
   running: boolean;
-  mode: string;
-  obf: string;
-  runtime: string;
   euid: number;
-  wg: { present: boolean; port: number };
-  virt: string;
-  wg_kernel: boolean;
-  conflicts: {
-    warp: boolean;
-    x3ui: boolean;
-    wgeasy: boolean;
-    tailscale: boolean;
-    other_ifaces: string[] | null;
+  arch: string;
+  /** Заполняются только на установленном сервере. */
+  method: string;
+  version: string;
+  config: {
+    method: string;
+    backend: string;
+    connect: string;
+    host: string;
+    listen_port: number;
+    wg_port: number;
+    wg_net: string;
+    mode: string;
+    obf_profile: string;
+    obf_key: string;
+    version: string;
+  };
+};
+
+/** Доступ, выданный сервером: свой у владельца и по одному на гостя. */
+export type VPSClient = {
+  name: string;
+  client_id: string;
+  self: boolean;
+  ip: string;
+  pub: string;
+  /** Время последнего рукопожатия WireGuard, unix-секунды; 0 — не было. */
+  hs: number;
+};
+
+export type VPSClientList = {
+  clients: VPSClient[] | null;
+  share: {
+    backend: string;
+    host: string;
+    port: number;
+    mode: string;
+    obf_profile: string;
+    obf_key: string;
   };
 };
 
@@ -308,6 +369,7 @@ export const EVENTS = {
   profiles: "profiles:changed",
   vpsLog: "vps:log",
   tunnel: "tunnel:state",
+  socks: "socks:state",
 } as const;
 
 /** Бэкенд доступен только внутри окна Wails; в браузере (vite dev) его нет. */

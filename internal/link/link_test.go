@@ -195,3 +195,40 @@ func decodeLink(t *testing.T, url string) string {
 	}
 	return string(data)
 }
+
+// bond ездит в ссылке только вместе с режимом tcp - в udp ядро его не знает.
+func TestLinkBondRoundTrip(t *testing.T) {
+	p := profile.New("bond")
+	p.Client.ServerAddress = "1.2.3.4:56000"
+	p.Client.VKLink = "https://vk.ru/call/join/abc"
+	p.Client.Bond = true
+	p.Opts.ProxyMode = profile.ModeTCP
+
+	l := FromProfile(p, false, "")
+	if !l.Bond {
+		t.Fatal("bond не попал в ссылку")
+	}
+	if got := l.ToProfile(); !got.Client.Bond {
+		t.Error("bond не вернулся из ссылки")
+	}
+
+	p.Opts.ProxyMode = profile.ModeUDP
+	if FromProfile(p, false, "").Bond {
+		t.Error("bond попал в ссылку в режиме udp")
+	}
+}
+
+// Провайдер direct должен переживать обмен ссылкой.
+func TestLinkDirectProvider(t *testing.T) {
+	p := profile.New("direct")
+	p.Client.ServerAddress = "1.2.3.4:56000"
+	p.Client.Provider = profile.ProviderDirect
+
+	l := FromProfile(p, false, "")
+	if l.Provider != profile.ProviderDirect {
+		t.Fatalf("провайдер в ссылке = %q", l.Provider)
+	}
+	if got := l.ToProfile(); got.Client.Provider != profile.ProviderDirect {
+		t.Errorf("провайдер после разбора = %q", got.Client.Provider)
+	}
+}

@@ -14,7 +14,10 @@ import (
 
 // Значения-перечисления ядра (internal/config ядра, data/config/CoreFlags.kt).
 const (
-	ProviderVK = "vk"
+	// ProviderVK - потоки идут через TURN-реле сервиса звонков.
+	// ProviderDirect - напрямую на -peer, без реле (ядро 4.0+).
+	ProviderVK     = "vk"
+	ProviderDirect = "direct"
 
 	TransportTCP = "tcp"
 	TransportUDP = "udp"
@@ -40,17 +43,38 @@ const (
 	// DefaultListen - дефолт ядра для локального сокета.
 	DefaultListen = "127.0.0.1:9000"
 
+	// Значения ServerBackend: свой WireGuard или чужой VPN на сервере.
+	// Совпадают с --backend install.sh.
+	ServerBackendNew      = "new"
+	ServerBackendExternal = "external"
+
+	// DefaultSocksListen - дефолт раздачи: тот же порт, что у SOCKS5
+	// Hotspot Android-клиента.
+	DefaultSocksListen = "0.0.0.0:1080"
+
 	// WGMTU - константа туннеля: WG идёт поверх TURN, 1420 фрагментируется.
 	// Совпадает с WG_MTU сервера (scripts/install.sh) и Android-клиентом.
 	WGMTU = 1280
 )
 
-// Дефолты ядра (internal/config/defaults.go). Флаг, равный дефолту, в
-// командную строку не пишется - так же поступает ClientArgs в ядре.
+// Дефолты ядра (docs/flags.md ядра). Флаг, равный дефолту, в командную
+// строку не пишется - так же поступает ClientArgs в ядре.
+//
+// В ядре 4.0 оба счётчика выросли с 10 до 12, а у direct свой дефолт
+// потоков: реле там нет, и распараллеливать нечего.
 const (
-	DefaultN              = 10
-	DefaultStreamsPerCred = 10
+	DefaultN              = 12
+	DefaultNDirect        = 1
+	DefaultStreamsPerCred = 12
 )
+
+// DefaultThreads - дефолт -n для выбранного провайдера.
+func DefaultThreads(provider string) int {
+	if provider == ProviderDirect {
+		return DefaultNDirect
+	}
+	return DefaultN
+}
 
 // Client - параметры клиента ядра.
 type Client struct {
@@ -60,12 +84,15 @@ type Client struct {
 	Threads        int    `json:"threads"`
 	StreamsPerCred int    `json:"streamsPerCred"`
 	UseUDP         bool   `json:"useUdp"`
-	ManualCaptcha  bool   `json:"manualCaptcha"`
-	LocalPort      string `json:"localPort"`
-	DebugMode      bool   `json:"debugMode"`
-	DNSMode        string `json:"dnsMode"`
-	CustomDNS      string `json:"customDns"`
-	Platform       string `json:"platform"`
+	// Bond объединяет сессии в одно TCP-соединение (-bond, ядро 4.0+).
+	// Только для режима tcp и только с обновлённым сервером.
+	Bond          bool   `json:"bond"`
+	ManualCaptcha bool   `json:"manualCaptcha"`
+	LocalPort     string `json:"localPort"`
+	DebugMode     bool   `json:"debugMode"`
+	DNSMode       string `json:"dnsMode"`
+	CustomDNS     string `json:"customDns"`
+	Platform      string `json:"platform"`
 	// MagicSwitch включает ручной TURN-сервер (-turn/-port) из MagicTurn.
 	MagicSwitch bool   `json:"magicSwitch"`
 	MagicTurn   string `json:"magicTurn"`
@@ -80,6 +107,14 @@ type Client struct {
 	// (на Windows аналога Android per-app нет, см. docs/analysis.md).
 	SplitTunnelMode    string `json:"splitTunnelMode"`
 	SplitTunnelSubnets string `json:"splitTunnelSubnets"`
+
+	// SocksHotspot раздаёт поднятый туннель в локальную сеть через
+	// SOCKS5 (как «SOCKS5 Hotspot» Android-клиента). Работает только в
+	// режиме VPN: в режиме прокси заворачивать в туннель нечего.
+	SocksHotspot  bool   `json:"socksHotspot"`
+	SocksListen   string `json:"socksListen"`
+	SocksUser     string `json:"socksUser"`
+	SocksPassword string `json:"socksPassword"`
 
 	LogsEnabled bool   `json:"logsEnabled"`
 	ClientID    string `json:"clientId"`
@@ -163,7 +198,11 @@ type Profile struct {
 	Client       Client `json:"client"`
 	ProxyListen  string `json:"proxyListen"`
 	ProxyConnect string `json:"proxyConnect"`
-	Opts         Opts   `json:"opts"`
+	// ServerBackend - что стоит за релеем на сервере: поднять свой
+	// WireGuard или отдавать трафик в уже работающий VPN (3x-ui, Xray,
+	// чужой WireGuard) по адресу ProxyConnect.
+	ServerBackend string `json:"serverBackend"`
+	Opts          Opts   `json:"opts"`
 	// SubURL заполняется, когда профиль пришёл из подписки.
 	SubURL string `json:"subUrl,omitempty"`
 	// Extra хранит поля Android-клиента, которых нет в модели Windows
@@ -195,11 +234,13 @@ func New(name string) Profile {
 			TunnelTransport:     "none",
 			WireGuardTunnelName: "freeturn-wg",
 			SplitTunnelMode:     "all",
+			SocksListen:         DefaultSocksListen,
 			LogsEnabled:         true,
 		},
-		ProxyListen:  "0.0.0.0:56000",
-		ProxyConnect: "127.0.0.1:40537",
-		Opts:         Opts{ObfProfile: ObfNone, ProxyMode: ModeUDP, KCP: DefaultKCP()},
+		ProxyListen:   "0.0.0.0:56000",
+		ProxyConnect:  "127.0.0.1:40537",
+		ServerBackend: ServerBackendNew,
+		Opts:          Opts{ObfProfile: ObfNone, ProxyMode: ModeUDP, KCP: DefaultKCP()},
 	}
 }
 

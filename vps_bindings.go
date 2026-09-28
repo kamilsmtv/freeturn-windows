@@ -1,17 +1,13 @@
 package main
 
 import (
-	"context"
-	"encoding/base64"
 	"errors"
 	"strings"
-	"time"
 
+	"github.com/kamilsmtv/freeturn-windows/internal/core"
 	"github.com/kamilsmtv/freeturn-windows/internal/link"
 	"github.com/kamilsmtv/freeturn-windows/internal/profile"
-	"github.com/kamilsmtv/freeturn-windows/internal/tunnel"
 	"github.com/kamilsmtv/freeturn-windows/internal/vps"
-	"github.com/kamilsmtv/freeturn-windows/internal/wg"
 )
 
 // EventVPSLog - строка хода выполнения команды на сервере.
@@ -38,7 +34,10 @@ func (a *App) vpsCall(id string, fn func(p profile.Profile) (VPSResult, error)) 
 		return VPSResult{Error: err.Error()}
 	}
 	if strings.TrimSpace(p.SSH.IP) == "" {
-		return VPSResult{Error: "не задан адрес сервера в разделе SSH"}
+		// Адрес VPS и доступ к нему живут на вкладке «Сервер», а спотыкается
+		// об это чаще всего кнопка в профиле - поэтому говорим, куда идти.
+		return VPSResult{Error: "не заполнен доступ по SSH: адрес VPS, пользователь и пароль " +
+			"задаются на вкладке «Сервер»"}
 	}
 
 	res, err := fn(p)
@@ -50,6 +49,9 @@ func (a *App) vpsCall(id string, fn func(p profile.Profile) (VPSResult, error)) 
 	var unknown *vps.ErrUnknownHost
 	if errors.As(err, &unknown) {
 		return VPSResult{Fingerprint: unknown.Fingerprint, Error: unknown.Error()}
+	}
+	if msg := vps.TimeoutMessage(err); msg != "" {
+		return VPSResult{Error: msg}
 	}
 	return VPSResult{Error: err.Error()}
 }
@@ -80,37 +82,100 @@ func (a *App) VPSProbe(id string) VPSResult {
 	})
 }
 
-// VPSInstall ставит ядро на сервер.
-func (a *App) VPSInstall(id string, withWGPkg bool) VPSResult {
+// VPSApply ставит, настраивает и запускает сервер одной командой.
+//
+// В протоколе 3 отдельных install, wg-setup и start больше нет: apply
+// делает всё сам, поднимает WireGuard и возвращает готовую конфигурацию
+// владельца. Её сразу кладём в профиль - отдельно запрашивать нечего.
+func (a *App) VPSApply(id string) VPSResult {
 	return a.vpsCall(id, func(p profile.Profile) (VPSResult, error) {
-		data, resp, err := a.vps.Install(a.bg(), p.SSH, vps.InstallOptions{WithWGPkg: withWGPkg})
+		// Пустой ключ - не беда: сервер сгенерирует его сам и вернёт в
+		// ответе. А вот испорченный он молча не исправит.
+		if p.Opts.ObfEnabled() && p.Opts.ObfKey != "" && !profile.ValidObfKey(p.Opts.ObfKey) {
+			return VPSResult{Error: "ключ обфускации в профиле испорчен: нужны 64 hex-символа. " +
+				"Очистите поле - сервер создаст ключ сам"}, nil
+		}
+		// Чужому бэкенду адрес обязателен: без него серверу некуда
+		// отдавать расшифрованный трафик, а скрипт ответит невнятно.
+		if externalBackend(p) && !core.ValidHostPort(strings.TrimSpace(p.ProxyConnect)) {
+			return VPSResult{Error: "заполните поле «Адрес своего VPN на сервере» — " +
+				"например 127.0.0.1:443 для 3x-ui или 127.0.0.1:51820 для WireGuard"}, nil
+		}
+
+		data, resp, err := a.vps.Apply(a.bg(), p.SSH, a.applyOptions(p))
 		if err != nil {
 			return VPSResult{}, err
 		}
 		if !resp.OK() {
 			return VPSResult{Error: vps.Explain(resp)}, nil
 		}
-		return VPSResult{OK: true, Text: "Ядро " + data.Version + " (" + data.Stage + "), запуск через " + data.Runtime}, nil
+
+		// Ключ сервер мог сгенерировать сам - тогда он в ответе, и без него
+		// клиент не соберёт рабочее соединение.
+		if data.ObfKey != "" {
+			p.Opts.ObfKey = data.ObfKey
+		}
+		if conf := vps.DecodeBase64(data.Owner.ConfB64); conf != "" {
+			p.Client.WireGuardConfig = conf
+			p.Client.TunnelTransport = "wireguard"
+		}
+		if data.Owner.ClientID != "" {
+			p.Client.ClientID = data.Owner.ClientID
+		}
+		// Фактические порты знает только сервер: часть из них он выбирает
+		// сам (порт WireGuard), а часть подставляет по умолчанию, если мы
+		// их не передали. Без этого шага профиль остался бы с адресом, по
+		// которому никто не слушает. Ошибку глотаем: сервер уже настроен.
+		if probe, presp, perr := a.vps.Probe(a.bg(), p.SSH); perr == nil && presp.OK() {
+			cfg := probe.Config
+			if connect := backendAddr(cfg); connect != "" {
+				p.ProxyConnect = connect
+			}
+			if cfg.ListenPort > 0 {
+				p.ProxyListen = "0.0.0.0:" + itoa(cfg.ListenPort)
+				host := strings.TrimSpace(cfg.Host)
+				if host == "" {
+					host = strings.TrimSpace(p.SSH.IP)
+				}
+				if host != "" {
+					p.Client.ServerAddress = host + ":" + itoa(cfg.ListenPort)
+				}
+			}
+		} else if port := vps.Port(p.ProxyListen); port > 0 && p.SSH.IP != "" {
+			p.Client.ServerAddress = p.SSH.IP + ":" + itoa(port)
+		}
+
+		saved, err := a.profiles.Save(p)
+		if err != nil {
+			return VPSResult{}, err
+		}
+		a.emitProfiles()
+
+		text := "Сервер установлен и запущен, конфигурация владельца сохранена в профиль"
+		if externalBackend(p) {
+			text = "Сервер установлен и запущен, трафик уходит в ваш VPN на " +
+				strings.TrimSpace(p.ProxyConnect) + ". Конфигурацию клиента берите в нём же — " +
+				"FreeTurn работает транспортом и своих ключей не выдаёт"
+			text += staleTunnelNote(p)
+		}
+		if data.NeedsRestart {
+			text += ". Параметры раздачи изменились - выданные раньше доступы нужно раздать заново"
+		}
+		return VPSResult{OK: true, Profile: &saved, Text: text}, nil
 	})
 }
 
-// VPSStart запускает серверную часть с параметрами профиля.
-func (a *App) VPSStart(id string) VPSResult {
+// VPSRestart перезапускает серверную часть, не трогая настройки.
+func (a *App) VPSRestart(id string) VPSResult {
 	return a.vpsCall(id, func(p profile.Profile) (VPSResult, error) {
-		// Ключ обфускации и client-id обязаны совпасть с клиентскими,
-		// поэтому берём их из того же профиля.
-		if p.Opts.ObfEnabled() && !profile.ValidObfKey(p.Opts.ObfKey) {
-			return VPSResult{Error: "перед запуском задайте ключ обфускации в профиле"}, nil
-		}
-
-		resp, err := a.vps.Start(a.bg(), p.SSH, a.startOptions(p))
+		resp, err := a.vps.Restart(a.bg(), p.SSH)
 		if err != nil {
 			return VPSResult{}, err
 		}
 		if !resp.OK() {
 			return VPSResult{Error: vps.Explain(resp)}, nil
 		}
-		return VPSResult{OK: true, Text: "Сервер запущен"}, nil
+		return VPSResult{OK: true, Text: "Сервер перезапущен"}, nil
 	})
 }
 
@@ -142,254 +207,86 @@ func (a *App) VPSLogs(id string, lines int) VPSResult {
 	})
 }
 
-// VPSSetupWireGuard поднимает на сервере WireGuard и кладёт конфиг в профиль.
-func (a *App) VPSSetupWireGuard(id string) VPSResult {
-	return a.vpsCall(id, a.setupWireGuard)
+// applyOptions собирает параметры установки сервера из профиля.
+func (a *App) applyOptions(p profile.Profile) vps.ApplyOptions {
+	o := vps.ApplyOptions{
+		Backend:    vps.BackendNew,
+		Host:       strings.TrimSpace(p.SSH.IP),
+		ListenPort: vps.Port(p.ProxyListen),
+		Mode:       p.Opts.ProxyMode,
+		ObfProfile: p.Opts.ObfProfile,
+		ObfKey:     p.Opts.ObfKey,
+		KCP:        p.Opts.KCP,
+		KCPCustom:  p.Opts.KCP != profile.DefaultKCP(),
+	}
+	if externalBackend(p) {
+		o.Backend = vps.BackendExternal
+		o.Connect = strings.TrimSpace(p.ProxyConnect)
+	}
+	return o
 }
 
-// setupWireGuard поднимает на сервере интерфейс AmneziaWG, забирает конфиг
-// его владельца и перезапускает ядро на выданный порт.
+// externalBackend сообщает, что за релеем стоит чужой VPN.
 //
-// Порядок повторяет мастер Android-клиента: wg-setup возвращает фактический
-// порт интерфейса, и сервер должен слать трафик именно туда (-connect),
-// иначе релей будет стучаться в пустоту.
-func (a *App) setupWireGuard(p profile.Profile) (VPSResult, error) {
-	// На сервере уже может работать обычный WireGuard: wg-setup поднимает
-	// рядом с ним вторую реализацию (AmneziaWG) и часто срывается, а смысла
-	// в этом нет - достаточно добавить себя пиром в работающий интерфейс.
-	//
-	// Ошибку share-info глотаем намеренно: на сервере без установленного
-	// ядра команды ещё нет, и это как раз случай для wg-setup.
-	if info, resp, err := a.vps.ShareInfo(a.bg(), p.SSH); err == nil && resp.OK() && !info.CanAddPeers() {
-		if probe, presp, perr := a.vps.Probe(a.bg(), p.SSH); perr == nil && presp.OK() && probe.WG.Present {
-			return a.adoptWireGuard(p, info)
-		}
-	}
-	return a.installWireGuard(p)
+// Выбор хранится в профиле, но режим проброса tcp решает за него: свой
+// WireGuard скрипт поднимает только для udp, и это его правило, не наше.
+func externalBackend(p profile.Profile) bool {
+	return p.ServerBackend == profile.ServerBackendExternal || p.Opts.TCPMode()
 }
 
-// installWireGuard разворачивает на сервере AmneziaWG через wg-setup.
+// VPSImportParams переносит в профиль параметры, с которыми сервер реально
+// работает: адрес и порт, режим, профиль и ключ обфускации.
 //
-// Вызывать его напрямую стоит только там, где уже известно, что своего
-// WireGuard на сервере нет: сам он этого не проверяет.
-func (a *App) installWireGuard(p profile.Profile) (VPSResult, error) {
-	port := a.backendPortFor(p)
-
-	// install.sh генерирует ключи интерфейса через awg, wg или docker;
-	// если их нет, он падает без внятной причины - доставляем заранее.
-	//
-	// Срок ограничиваем: apt-get умеет ждать чужой dpkg-блокировки сколько
-	// угодно, а команда без конца выглядит как зависшее приложение.
-	toolsCtx, cancel := context.WithTimeout(a.bg(), 5*time.Minute)
-	defer cancel()
-	if _, err := a.vps.EnsureWGTools(toolsCtx, p.SSH); err != nil {
-		return VPSResult{Error: err.Error()}, nil
-	}
-
-	data, resp, err := a.vps.WGSetup(a.bg(), p.SSH, port, endpointFor(p))
-	if err != nil {
-		return VPSResult{}, err
-	}
-	if !resp.OK() {
-		return VPSResult{Error: vps.Explain(resp)}, nil
-	}
-
-	if data.WG.Port > 0 {
-		port = data.WG.Port
-	}
-
-	// Конфигурацию профиля не затираем: если сервер её не вернул, старая
-	// пригодится хотя бы как есть, а новую сейчас запросим отдельно.
-	conf := vps.DecodeBase64(data.ClientConfB64)
-	if conf != "" {
-		p.Client.WireGuardConfig = conf
-	}
-	p.Client.TunnelTransport = "wireguard"
-	p.ProxyConnect = "127.0.0.1:" + itoa(port)
-	saved, err := a.profiles.Save(p)
-	if err != nil {
-		return VPSResult{}, err
-	}
-	a.emitProfiles()
-
-	text := "WireGuard поднят на порту " + itoa(port)
-	if conf == "" {
-		// wg-setup только поднимает интерфейс: конфигурацию клиента
-		// install.sh отдаёт исключительно в peer-add, поэтому сразу
-		// просим себе пира - иначе профиль остался бы без ключей.
-		res, perr := a.peerConfig(saved)
-		if perr != nil {
-			return VPSResult{}, perr
-		}
-		if !res.OK || res.Profile == nil {
-			return VPSResult{Error: "интерфейс поднят на порту " + itoa(port) +
-				", но получить конфигурацию клиента не удалось: " + res.Error}, nil
-		}
-		saved = *res.Profile
-		text += ", " + res.Text
-	} else {
-		text += ", конфигурация клиента сохранена в профиль"
-	}
-	// Ядро на сервере должно отдавать трафик в этот интерфейс.
-	if restart, rerr := a.vps.Start(a.bg(), saved.SSH, a.startOptions(saved)); rerr != nil {
-		text += ". Перезапустить сервер не удалось: " + rerr.Error()
-	} else if !restart.OK() {
-		text += ". Перезапустите сервер вручную: " + vps.Explain(restart)
-	} else {
-		text += ", сервер перезапущен на этот порт"
-	}
-	return VPSResult{OK: true, Profile: &saved, Text: text}, nil
-}
-
-// adoptWireGuard добавляет клиента в WireGuard, который уже работает на
-// сервере, и собирает по его данным конфигурацию.
-//
-// install.sh заводит пиров только для AmneziaWG, а обычный WireGuard он
-// лишь видит. Разворачивать поверх рабочего сервера вторую реализацию -
-// лишний риск, поэтому добавляем себя в существующий интерфейс.
-func (a *App) adoptWireGuard(p profile.Profile, info vps.ShareInfoData) (VPSResult, error) {
-	keys, err := tunnel.GenerateKeyPair()
-	if err != nil {
-		return VPSResult{}, err
-	}
-
-	// Ошибку отдаём наверх: vpsCall сам приведёт её к виду для интерфейса.
-	peer, err := a.vps.AdoptWireGuard(a.bg(), p.SSH, keys.Public, "")
-	if err != nil {
-		return VPSResult{}, err
-	}
-
-	// DNS в конфигурации туннеля не заполняем: поле «Свои DNS» профиля
-	// относится к ядру и указывает на резолвер физической сети, внутри
-	// туннеля он недоступен. Туннель подставит свой резолвер сам.
-	conf := wg.ClientConf(wg.ClientConfOptions{
-		PrivateKey:      keys.Private,
-		Address:         peer.ClientIP + "/32",
-		ServerPublicKey: peer.ServerPublicKey,
-		Endpoint:        endpointFor(p),
-	})
-
-	p.Client.WireGuardConfig = conf
-	p.Client.TunnelTransport = "wireguard"
-	if peer.Port > 0 {
-		p.ProxyConnect = "127.0.0.1:" + itoa(peer.Port)
-	}
-	// Параметры обфускации сервера обязаны совпасть с клиентскими; берём
-	// их из аргументов запуска, а не из share-info: там ключа может не быть.
-	if params, perr := a.vps.ServerParams(a.bg(), p.SSH); perr == nil {
-		applyServerParams(&p, params)
-	} else {
-		applyShareInfo(&p, info)
-	}
-
-	saved, err := a.profiles.Save(p)
-	if err != nil {
-		return VPSResult{}, err
-	}
-	a.emitProfiles()
-	text := "Клиент добавлен в WireGuard сервера (интерфейс " + peer.Interface +
-		", адрес " + peer.ClientIP + "), конфигурация сохранена в профиль"
-	if !peer.Saved {
-		text += ". Внимание: записать пира в конфигурацию сервера не удалось - " +
-			"он проживёт до перезагрузки интерфейса"
-	}
-	return VPSResult{OK: true, Profile: &saved, Text: text}, nil
-}
-
-// applyServerParams переносит в профиль фактические параметры сервера.
-func applyServerParams(p *profile.Profile, params vps.ServerParams) {
-	if params.Mode != "" {
-		p.Opts.ProxyMode = params.Mode
-	}
-	if params.ObfProfile != "" {
-		p.Opts.ObfProfile = params.ObfProfile
-	}
-	if params.ObfKey != "" {
-		p.Opts.ObfKey = params.ObfKey
-	}
-	if port := vps.Port(params.Listen); port > 0 && p.SSH.IP != "" {
-		p.Client.ServerAddress = p.SSH.IP + ":" + itoa(port)
-	}
-}
-
-// applyShareInfo переносит в профиль режим и обфускацию сервера.
-func applyShareInfo(p *profile.Profile, info vps.ShareInfoData) {
-	if info.Mode != "" {
-		p.Opts.ProxyMode = info.Mode
-	}
-	if info.ObfProfile != "" {
-		p.Opts.ObfProfile = info.ObfProfile
-	}
-	if info.ObfKey != "" {
-		p.Opts.ObfKey = info.ObfKey
-	}
-}
-
-// backendPortFor выбирает порт локального бэкенда: сначала тот, что уже
-// поднят на сервере, затем указанный в профиле, затем дефолт WireGuard.
-func (a *App) backendPortFor(p profile.Profile) int {
-	if probe, resp, err := a.vps.Probe(a.bg(), p.SSH); err == nil && resp.OK() && probe.WG.Port > 0 {
-		return probe.WG.Port
-	}
-	if port := backendPort(p.ProxyConnect); port > 0 {
-		return port
-	}
-	return 51820
-}
-
-// startOptions собирает параметры запуска серверной части из профиля.
-func (a *App) startOptions(p profile.Profile) vps.InstallOptions {
-	clientID := p.Client.ClientID
-	if clientID == "" {
-		clientID = a.ownClientID()
-	}
-	return vps.InstallOptions{
-		Listen:      p.ProxyListen,
-		Connect:     p.ProxyConnect,
-		Mode:        p.Opts.ProxyMode,
-		ObfProfile:  p.Opts.ObfProfile,
-		ObfKey:      p.Opts.ObfKey,
-		ObfTimingMs: p.Opts.ObfTimingMs,
-		ClientID:    clientID,
-		KCP:         p.Opts.KCP,
-		KCPCustom:   p.Opts.KCP != profile.DefaultKCP(),
-	}
-}
-
-// VPSImportShareInfo переносит в профиль параметры, с которыми сервер
-// реально работает: адрес и порт, режим, профиль и ключ обфускации.
-//
-// share-info для этого не хватает: он отдаёт только содержимое install.conf
-// и умалчивает ключ, если там его нет, - а именно из-за несовпадения ключа
-// сервер рвёт handshake.
-func (a *App) VPSImportShareInfo(id string) VPSResult {
+// В протоколе 3 всё это отдаёт probe: раньше приходилось читать install.conf
+// и run.args своим скриптом, потому что share-info умалчивал ключ.
+func (a *App) VPSImportParams(id string) VPSResult {
 	return a.vpsCall(id, func(p profile.Profile) (VPSResult, error) {
-		params, err := a.vps.ServerParams(a.bg(), p.SSH)
+		data, resp, err := a.vps.Probe(a.bg(), p.SSH)
 		if err != nil {
 			return VPSResult{}, err
 		}
+		if !resp.OK() {
+			return VPSResult{Error: vps.Explain(resp)}, nil
+		}
+		if !data.Installed {
+			return VPSResult{Error: "на сервере ещё нет ядра - сначала установите его"}, nil
+		}
 
+		cfg := data.Config
 		var notes []string
-		if port := vps.Port(params.Listen); port > 0 {
-			// Адрес сервера собираем из его же SSH-адреса и порта прослушивания.
-			addr := p.SSH.IP + ":" + itoa(port)
+		if cfg.ListenPort > 0 {
+			host := strings.TrimSpace(cfg.Host)
+			if host == "" {
+				host = p.SSH.IP
+			}
+			addr := host + ":" + itoa(cfg.ListenPort)
 			if p.Client.ServerAddress != addr {
 				notes = append(notes, "адрес сервера: "+addr)
 			}
 			p.Client.ServerAddress = addr
+			p.ProxyListen = "0.0.0.0:" + itoa(cfg.ListenPort)
 		}
-		if params.Connect != "" {
-			p.ProxyConnect = params.Connect
+		if connect := backendAddr(cfg); connect != "" {
+			p.ProxyConnect = connect
 		}
-		if params.Mode != "" {
-			p.Opts.ProxyMode = params.Mode
+		// Выбор бэкенда тоже переносим: иначе профиль считал бы, что за
+		// релеем наш WireGuard, и следующая установка подняла бы его на
+		// сервере, где владелец нарочно поставил свой VPN.
+		if cfg.Backend != "" {
+			p.ServerBackend = cfg.Backend
+			if cfg.Backend == profile.ServerBackendExternal {
+				notes = append(notes, "за релеем ваш VPN на "+p.ProxyConnect)
+			}
 		}
-		if params.ObfProfile != "" {
-			p.Opts.ObfProfile = params.ObfProfile
-			notes = append(notes, "обфускация: "+params.ObfProfile)
+		if cfg.Mode != "" {
+			p.Opts.ProxyMode = cfg.Mode
 		}
-		if params.ObfKey != "" {
-			p.Opts.ObfKey = params.ObfKey
+		if cfg.ObfProfile != "" {
+			p.Opts.ObfProfile = cfg.ObfProfile
+			notes = append(notes, "обфускация: "+cfg.ObfProfile)
+		}
+		if cfg.ObfKey != "" {
+			p.Opts.ObfKey = cfg.ObfKey
 		}
 
 		// Профиль обфускации без ключа сделает конфигурацию нерабочей,
@@ -406,7 +303,7 @@ func (a *App) VPSImportShareInfo(id string) VPSResult {
 		}
 		a.emitProfiles()
 
-		text := "Параметры сервера перенесены в профиль (источник: " + params.Source + ")"
+		text := "Параметры сервера перенесены в профиль"
 		if len(notes) > 0 {
 			text += " — " + strings.Join(notes, ", ")
 		}
@@ -414,138 +311,195 @@ func (a *App) VPSImportShareInfo(id string) VPSResult {
 	})
 }
 
-// VPSFetchWGConfig просит сервер завести пира для этого профиля и кладёт
-// полученный конфиг в профиль.
+// VPSFetchWGConfig забирает с сервера конфигурацию владельца.
 //
-// Так же поступает Android-клиент: ключи и адрес выдаёт сервер, а вместе с
-// ними приходят его публичный ключ и параметры AmneziaWG. Обмениваться
-// ключами вручную не нужно.
+// Сервер выдаёт её сам при установке, но профиль мог приехать с другой
+// машины или конфигурация могла устареть после смены параметров.
 func (a *App) VPSFetchWGConfig(id string) VPSResult {
 	return a.vpsCall(id, func(p profile.Profile) (VPSResult, error) {
-		// peer-add дописывает [Peer] в конфигурацию AmneziaWG. Ни
-		// probe.wg.present, ни share-info.wg_backend для проверки не годятся:
-		// оба истинны и для обычного WireGuard, а нужной конфигурации при
-		// этом нет - команда срывается на дозаписи в несуществующий файл.
-		// Точный признак один: backend_type = awg.
-		info, resp, err := a.vps.ShareInfo(a.bg(), p.SSH)
+		data, resp, err := a.vps.ClientConf(a.bg(), p.SSH, vps.OwnerName)
 		if err != nil {
 			return VPSResult{}, err
 		}
 		if !resp.OK() {
 			return VPSResult{Error: vps.Explain(resp)}, nil
 		}
-		if !info.CanAddPeers() {
-			// На сервере может уже работать обычный WireGuard - тогда
-			// разворачивать AmneziaWG незачем, достаточно добавить себя
-			// в него пиром.
-			if probe, presp, perr := a.vps.Probe(a.bg(), p.SSH); perr == nil && presp.OK() && probe.WG.Present {
-				return a.adoptWireGuard(p, info)
+
+		conf := vps.DecodeBase64(data.ConfB64)
+		if conf == "" {
+			if externalBackend(p) {
+				return VPSResult{Error: "сервер отдаёт трафик в ваш VPN и своих ключей не выдаёт: " +
+					"конфигурацию клиента возьмите в нём (например в панели 3x-ui)"}, nil
 			}
-			// Своего WireGuard на сервере нет - разворачиваем AmneziaWG,
-			// повторно спрашивать сервер об этом уже незачем.
-			return a.installWireGuard(p)
+			return VPSResult{Error: "сервер не вернул конфигурацию владельца"}, nil
 		}
-		return a.peerConfig(p)
+
+		p.Client.WireGuardConfig = conf
+		p.Client.TunnelTransport = "wireguard"
+		if data.Client.ClientID != "" {
+			p.Client.ClientID = data.Client.ClientID
+		}
+		saved, err := a.profiles.Save(p)
+		if err != nil {
+			return VPSResult{}, err
+		}
+		a.emitProfiles()
+		return VPSResult{
+			OK:      true,
+			Profile: &saved,
+			Text:    "Сервер выдал конфигурацию: адрес " + data.Client.IP + ", ключи и параметры внутри",
+		}, nil
 	})
 }
 
-// peerConfig просит сервер завести пира AmneziaWG для этого профиля и
-// сохраняет выданную конфигурацию.
+// VPSRemoveWireGuard убирает с сервера поднятый нами интерфейс.
 //
-// Так же поступает Android-клиент: ключи и адрес выдаёт сервер, а вместе с
-// ними приходят его публичный ключ и параметры AmneziaWG. Обмениваться
-// ключами вручную не нужно.
-func (a *App) peerConfig(p profile.Profile) (VPSResult, error) {
-	clientID := p.Client.ClientID
-	if clientID == "" {
-		clientID = a.ownClientID()
-	}
-	name := strings.TrimSpace(p.Name)
-	if name == "" {
-		name = "windows"
-	}
-
-	data, resp, err := a.vps.PeerAdd(a.bg(), p.SSH, vps.PeerOptions{
-		NameB64:  base64.StdEncoding.EncodeToString([]byte(name)),
-		Endpoint: endpointFor(p),
-		ClientID: clientID,
-		DNS:      strings.TrimSpace(p.Client.CustomDNS),
+// Нужен при переходе на свой VPN: скрипт не даёт сменить бэкенд, пока его
+// WireGuard на месте. Действие необратимое - выданные им конфигурации
+// клиентов перестанут работать, поэтому спрашивать должен интерфейс.
+func (a *App) VPSRemoveWireGuard(id string) VPSResult {
+	return a.vpsCall(id, func(p profile.Profile) (VPSResult, error) {
+		resp, err := a.vps.Uninstall(a.bg(), p.SSH, vps.TargetWG, false)
+		if err != nil {
+			return VPSResult{}, err
+		}
+		if !resp.OK() {
+			return VPSResult{Error: vps.Explain(resp)}, nil
+		}
+		return VPSResult{OK: true, Text: "WireGuard, поднятый нами, удалён с сервера" + staleTunnelNote(p)}, nil
 	})
+}
+
+// VPSClients перечисляет выданные сервером доступы.
+func (a *App) VPSClients(id string) (vps.ClientListData, error) {
+	p, err := a.profiles.Get(id)
 	if err != nil {
-		return VPSResult{}, err
+		return vps.ClientListData{}, err
+	}
+	data, resp, err := a.vps.ClientList(a.bg(), p.SSH)
+	if err != nil {
+		return vps.ClientListData{}, err
 	}
 	if !resp.OK() {
-		return VPSResult{Error: vps.Explain(resp)}, nil
+		return vps.ClientListData{}, errors.New(vps.Explain(resp))
 	}
-
-	conf := vps.DecodeBase64(data.ClientConfB64)
-	if conf == "" {
-		return VPSResult{Error: "сервер не вернул конфигурацию клиента"}, nil
-	}
-
-	p.Client.WireGuardConfig = conf
-	p.Client.TunnelTransport = "wireguard"
-	p.Client.ClientID = clientID
-	saved, err := a.profiles.Save(p)
-	if err != nil {
-		return VPSResult{}, err
-	}
-	a.emitProfiles()
-	return VPSResult{
-		OK:      true,
-		Profile: &saved,
-		Text:    "Сервер выдал конфигурацию: адрес " + data.Peer.IP + ", ключи и параметры обфускации внутри",
-	}, nil
+	return data, nil
 }
 
-// VPSAddPeer заводит на сервере нового пира WireGuard и возвращает ссылку
-// для гостя вместе с его конфигом.
+// VPSAddPeer заводит на сервере доступ для гостя и возвращает готовую
+// ссылку.
+//
+// Ссылку собирает сам сервер: в ней его адрес, режим, обфускация и свежий
+// Client ID гостя. Нам остаётся вложить конфигурацию WireGuard, которую он
+// выдал этому же гостю.
 func (a *App) VPSAddPeer(id, name string) (string, error) {
 	p, err := a.profiles.Get(id)
 	if err != nil {
 		return "", err
 	}
+	// Имя уходит в имена файлов на сервере, и кириллицу он не примет.
+	if !vps.ValidClientName(strings.TrimSpace(name)) {
+		return "", errors.New("имя доступа сервер принимает только латиницей: буквы, цифры, " +
+			"точка, дефис и подчёркивание, до 32 символов")
+	}
 
-	nameB64 := base64.StdEncoding.EncodeToString([]byte(strings.TrimSpace(name)))
-	data, resp, err := a.vps.PeerAdd(a.bg(), p.SSH, vps.PeerOptions{
-		NameB64:  nameB64,
-		Endpoint: endpointFor(p),
-		ClientID: profile.NewClientID(),
-		DNS:      strings.TrimSpace(p.Client.CustomDNS),
-	})
+	data, resp, err := a.vps.ClientAdd(a.bg(), p.SSH, name)
 	if err != nil {
 		return "", err
 	}
 	if !resp.OK() {
 		return "", errors.New(vps.Explain(resp))
 	}
-
-	guest := p
-	guest.Name = name
-	// Гостю уходит конфигурация, которую сервер выдал именно ему: класть
-	// свою нельзя, в ней приватный ключ владельца.
-	l := link.FromProfile(guest, false, data.ClientID).
-		WithWGConf(vps.DecodeBase64(data.ClientConfB64))
-	return l.Encode(), nil
+	return guestLink(p, name, data), nil
 }
 
-// backendPort достаёт порт из адреса host:port.
-func backendPort(addr string) int {
-	idx := strings.LastIndex(addr, ":")
-	if idx < 0 {
-		return 0
+// VPSPeerLink забирает ссылку уже заведённого гостя.
+//
+// Без неё доступ, выданный однажды, оставался бы недостижимым: завести
+// второй раз сервер не даёт («уже есть»), а показать первый было нечем.
+func (a *App) VPSPeerLink(id, name string) (string, error) {
+	p, err := a.profiles.Get(id)
+	if err != nil {
+		return "", err
 	}
-	n := 0
-	for _, r := range addr[idx+1:] {
-		if r < '0' || r > '9' {
-			return 0
+
+	data, resp, err := a.vps.ClientConf(a.bg(), p.SSH, name)
+	if err != nil {
+		return "", err
+	}
+	if !resp.OK() {
+		return "", errors.New(vps.Explain(resp))
+	}
+	return guestLink(p, name, data), nil
+}
+
+// guestLink достаёт ссылку из ответа сервера, а если тот её не дал -
+// собирает свою.
+func guestLink(p profile.Profile, name string, data vps.ClientData) string {
+	conf := vps.DecodeBase64(data.ConfB64)
+	if raw := strings.TrimSpace(data.Link); raw != "" {
+		l, lerr := link.Parse(raw)
+		switch {
+		case lerr != nil:
+			// Ссылку не поняли - соберём свою ниже.
+		case strings.TrimSpace(l.WGConf) != "":
+			// Сервер вложил конфигурацию сам: отдаём его ссылку как есть.
+			// Пересобирать её нельзя - поля, которых нет в нашей модели,
+			// при этом потерялись бы, а сервер новее клиента почти всегда.
+			return raw
+		default:
+			return l.WithWGConf(conf).Encode()
 		}
-		n = n*10 + int(r-'0')
 	}
-	if n < 1 || n > 65535 {
-		return 0
+
+	// Сервер ссылку не дал или она непонятная - собираем свою, как раньше.
+	guest := p
+	guest.Name = name
+	return link.FromProfile(guest, false, data.Client.ClientID).WithWGConf(conf).Encode()
+}
+
+// VPSRemovePeer отзывает доступ гостя.
+func (a *App) VPSRemovePeer(id, name string) VPSResult {
+	return a.vpsCall(id, func(p profile.Profile) (VPSResult, error) {
+		resp, err := a.vps.ClientRemove(a.bg(), p.SSH, name)
+		if err != nil {
+			return VPSResult{}, err
+		}
+		if !resp.OK() {
+			return VPSResult{Error: vps.Explain(resp)}, nil
+		}
+		return VPSResult{OK: true, Text: "Доступ «" + name + "» отозван"}, nil
+	})
+}
+
+// staleTunnelNote предупреждает, что конфигурация в профиле больше не
+// подойдёт.
+//
+// Молчать тут нельзя: профиль остаётся в режиме VPN со старыми ключами,
+// подключение будет срываться на рукопожатии, и виноватым будет выглядеть
+// приложение, а не сменившийся бэкенд сервера.
+func staleTunnelNote(p profile.Profile) string {
+	if p.Client.TunnelTransport != "wireguard" || strings.TrimSpace(p.Client.WireGuardConfig) == "" {
+		return ""
 	}
-	return n
+	return ". Внимание: в профиле осталась прежняя конфигурация WireGuard - " +
+		"она больше не подойдёт. Замените её конфигурацией из своего VPN " +
+		"или переключите профиль в режим прокси"
+}
+
+// backendAddr - адрес, куда сервер отдаёт расшифрованный трафик.
+//
+// Для чужого VPN он записан в install.conf, а для своего WireGuard поле
+// connect остаётся пустым: скрипт держит интерфейс на той же машине и
+// помнит только его порт.
+func backendAddr(cfg vps.ConfigData) string {
+	if addr := strings.TrimSpace(cfg.Connect); addr != "" {
+		return addr
+	}
+	if cfg.Backend == vps.BackendNew && cfg.WGPort > 0 {
+		return "127.0.0.1:" + itoa(cfg.WGPort)
+	}
+	return ""
 }
 
 func itoa(n int) string {

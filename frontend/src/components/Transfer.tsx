@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { backend, type Profile } from "../lib/api";
 import { guard } from "../lib/effect";
+import { validClientName } from "../lib/format";
 import { Button } from "./ui";
 import { CheckBox, Field, TextArea, TextInput } from "./Field";
 import { QRCode } from "./QRCode";
@@ -62,7 +63,20 @@ export function ShareDialog({ profile, onClose }: { profile: Profile; onClose: (
   const [saved, setSaved] = useState("");
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
+  // Доступ заводит сервер: он выдаёт Client ID, кладёт его в allowlist и
+  // отдаёт готовую ссылку с ключами. Ссылка, собранная из одного профиля,
+  // гостя не авторизует - сервер его просто не знает.
+  const [guest, setGuest] = useState("");
+  const [serverLink, setServerLink] = useState("");
+  const [creating, setCreating] = useState(false);
+  // Отказ сервера держим отдельно от ошибок сборки ссылки: место ошибки
+  // должно совпадать с местом кнопки, иначе её просто не видно - она
+  // уезжает под QR-код, и человек думает, что ничего не произошло.
+  const [serverError, setServerError] = useState("");
   const api = backend();
+
+  const canAsk = profile.ssh.ip.trim() !== "";
+  const shown = serverLink || url;
 
   // Ссылку пересобираем на каждое изменение переключателей: иначе на экране
   // (и в QR-коде) остаётся прежняя, и получатель сканирует не то, что видит
@@ -89,6 +103,59 @@ export function ShareDialog({ profile, onClose }: { profile: Profile; onClose: (
   return (
     <Modal title={`Поделиться профилем «${profile.name}»`} onClose={onClose}>
       <div className="flex flex-col gap-3">
+        {canAsk ? (
+          <div className="flex flex-col gap-2 rounded-xl border border-emerald-300 bg-emerald-50 p-3 dark:border-emerald-900 dark:bg-emerald-950/30">
+            <span className="text-[13px] font-medium">Завести доступ на сервере</span>
+            <span className="text-xs text-zinc-600 dark:text-zinc-400">
+              Сервер выдаст гостю свой Client ID, внесёт его в список допущенных и вложит в
+              ссылку конфигурацию. Без этого шага гость не подключится: сервер его не знает.
+            </span>
+            <div className="flex items-center gap-2 pt-1">
+              <TextInput value={guest} onChange={setGuest} placeholder="Имя гостя, латиницей" />
+              <Button
+                variant="primary"
+                busy={creating}
+                disabled={creating || !validClientName(guest)}
+                onClick={async () => {
+                  setServerError("");
+                  setCreating(true);
+                  try {
+                    setServerLink((await api?.VPSAddPeer(profile.id, guest.trim())) ?? "");
+                  } catch (e) {
+                    setServerError(String(e));
+                  } finally {
+                    setCreating(false);
+                  }
+                }}
+              >
+                Создать
+              </Button>
+            </div>
+            {guest.trim() !== "" && !validClientName(guest) && (
+              <span className="text-xs text-amber-700 dark:text-amber-500">
+                Сервер принимает латиницу, цифры, точку, дефис и подчёркивание — до 32 символов
+              </span>
+            )}
+            {serverError && (
+              <p className="whitespace-pre-wrap rounded-lg bg-red-100 px-3 py-2 text-xs text-red-900 dark:bg-red-950 dark:text-red-200">
+                {serverError}
+              </p>
+            )}
+          </div>
+        ) : (
+          <p className="rounded-xl bg-amber-100 px-3 py-2 text-xs text-amber-900 dark:bg-amber-950 dark:text-amber-200">
+            В профиле нет доступа по SSH, поэтому завести гостя на сервере отсюда нельзя. Ссылка
+            ниже несёт только настройки: владелец сервера должен добавить Client ID гостя в
+            список допущенных, иначе подключение не поднимется.
+          </p>
+        )}
+
+        {serverLink && (
+          <p className="text-xs text-emerald-700 dark:text-emerald-400">
+            Доступ заведён — ссылка ниже уже содержит Client ID гостя и его конфигурацию.
+          </p>
+        )}
+
         <CheckBox
           checked={includeVK}
           onChange={setIncludeVK}
@@ -103,7 +170,15 @@ export function ShareDialog({ profile, onClose }: { profile: Profile; onClose: (
             придётся вписать свою.
           </p>
         )}
-        <Field label="Client ID для получателя" hint="Владелец сервера добавляет его в allowlist">
+        {includeVK && serverLink && (
+          <p className="-mt-1 text-xs text-amber-600 dark:text-amber-400">
+            К ссылке от сервера звонок не подставляется — передайте её гостю отдельно.
+          </p>
+        )}
+        <Field
+          label="Client ID для получателя"
+          hint="Только для ручного пути: владелец сервера должен сам внести его в список допущенных"
+        >
           <div className="flex items-center gap-2">
             <TextInput value={clientId} onChange={setClientId} mono placeholder="необязательно" />
             <Button onClick={async () => setClientId((await api?.GenerateClientID()) ?? "")}>Создать</Button>
@@ -130,13 +205,13 @@ export function ShareDialog({ profile, onClose }: { profile: Profile; onClose: (
           </Button>
         </div>
 
-        {url && (
+        {shown && (
           <>
-            <QRCode text={url} name={profile.name} />
+            <QRCode text={shown} name={guest.trim() || profile.name} />
             <Field label="Ссылка">
-              <TextArea value={url} onChange={() => {}} rows={4} />
+              <TextArea value={shown} onChange={() => {}} rows={4} />
             </Field>
-            <Button onClick={() => navigator.clipboard.writeText(url)}>Скопировать</Button>
+            <Button onClick={() => navigator.clipboard.writeText(shown)}>Скопировать</Button>
           </>
         )}
         {saved && <p className="text-sm text-emerald-600">Сохранено: {saved}</p>}

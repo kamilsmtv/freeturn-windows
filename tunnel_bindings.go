@@ -2,7 +2,10 @@ package main
 
 import (
 	"fmt"
+	"net"
 	"net/netip"
+	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -10,9 +13,11 @@ import (
 	"github.com/kamilsmtv/freeturn-windows/internal/paths"
 	"github.com/kamilsmtv/freeturn-windows/internal/profile"
 	"github.com/kamilsmtv/freeturn-windows/internal/routes"
+	"github.com/kamilsmtv/freeturn-windows/internal/socks"
 	"github.com/kamilsmtv/freeturn-windows/internal/tunnel"
 	"github.com/kamilsmtv/freeturn-windows/internal/wg"
 	"github.com/kamilsmtv/freeturn-windows/internal/wintun"
+	wailsruntime "github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
 // TunnelStatus - состояние встроенного туннеля для UI.
@@ -25,6 +30,127 @@ type TunnelStatus struct {
 
 // EventTunnel - изменение состояния туннеля.
 const EventTunnel = "tunnel:state"
+
+// EventSocks - изменение состояния раздачи в локальную сеть.
+const EventSocks = "socks:state"
+
+// SocksStatus - состояние раздачи в локальную сеть для UI.
+type SocksStatus struct {
+	Enabled bool     `json:"enabled"`
+	Up      bool     `json:"up"`
+	Addr    string   `json:"addr"`
+	Hints   []string `json:"hints"`
+	Active  int      `json:"active"`
+	Error   string   `json:"error"`
+}
+
+// SocksStatus отдаёт текущее состояние раздачи.
+func (a *App) SocksStatus() SocksStatus {
+	st := SocksStatus{
+		Up:     a.socks.Running(),
+		Addr:   a.socks.Addr(),
+		Active: a.socks.Active(),
+		Error:  a.socksErr.Load(),
+	}
+	if st.Up {
+		st.Hints = netstat.LANAddrs(a.socks.Addr(), a.tunnel.Name())
+	}
+
+	if a.core.Running() {
+		if p := a.lastProfile.Load(); p != nil {
+			st.Enabled = wantsSocks(*p)
+			return st
+		}
+	}
+	if p, ok := a.profiles.All().Active(); ok {
+		st.Enabled = wantsSocks(p)
+	}
+	return st
+}
+
+// wantsSocks сообщает, должен ли профиль раздавать туннель в сеть.
+// Без туннеля раздача бессмысленна: заворачивать соседей некуда.
+func wantsSocks(p profile.Profile) bool {
+	return p.Client.SocksHotspot && wantsTunnel(p)
+}
+
+// startSocks поднимает SOCKS5-сервер поверх уже работающего туннеля и
+// открывает порт в брандмауэре.
+//
+// gen - поколение сеанса. Сокет открывается не мгновенно, и за это время
+// пользователь мог успеть отключиться. Раздача, пережившая отключение,
+// опаснее всего: туннеля уже нет, и трафик соседей пошёл бы в сеть
+// напрямую - ровно мимо того, ради чего они подключались.
+func (a *App) startSocks(gen int64, p profile.Profile) error {
+	listen := strings.TrimSpace(p.Client.SocksListen)
+	if listen == "" {
+		listen = profile.DefaultSocksListen
+	}
+
+	err := a.socks.Start(socks.Options{
+		Listen:   listen,
+		User:     strings.TrimSpace(p.Client.SocksUser),
+		Password: p.Client.SocksPassword,
+		Log:      a.core.AppendLog,
+	})
+	if err != nil {
+		return err
+	}
+	if a.connectGen.Load() != gen {
+		a.socks.Stop()
+		return nil
+	}
+
+	// Правило брандмауэра ставим после сокета: если порт занят, открывать
+	// его в системе незачем. Сокету на localhost правило не нужно вовсе -
+	// снаружи до него всё равно не достучаться.
+	if port, err := portOf(a.socks.Addr()); err == nil && !loopbackOnly(a.socks.Addr()) {
+		if err := socks.OpenPort(port); err != nil {
+			// Не повод снимать раздачу: в домашней сети правило может
+			// уже быть, а в доменной его ставит политика.
+			a.core.AppendLog("warn", "Раздача: "+err.Error())
+		}
+	}
+
+	a.core.AppendLog("info", "Раздача в локальную сеть включена: SOCKS5 на "+a.socks.Addr()+
+		", вход по логину "+strings.TrimSpace(p.Client.SocksUser))
+	return nil
+}
+
+// loopbackOnly сообщает, что сокет доступен только с этой машины.
+func loopbackOnly(addr string) bool {
+	host, _, err := net.SplitHostPort(addr)
+	if err != nil {
+		return false
+	}
+	ip, err := netip.ParseAddr(host)
+	return err == nil && ip.IsLoopback()
+}
+
+// stopSocks снимает раздачу и убирает правило брандмауэра.
+func (a *App) stopSocks() {
+	if !a.socks.Running() {
+		a.socksErr.Store("")
+		return
+	}
+	a.core.AppendLog("info", "Снимаю раздачу в локальную сеть")
+	a.socks.Stop()
+	socks.ClosePort()
+	a.socksErr.Store("")
+	a.emitSocks()
+}
+
+// emitSocks рассылает состояние раздачи.
+func (a *App) emitSocks() { a.emit(EventSocks, a.SocksStatus()) }
+
+// portOf достаёт номер порта из адреса вида ip:port.
+func portOf(addr string) (int, error) {
+	_, port, err := net.SplitHostPort(addr)
+	if err != nil {
+		return 0, err
+	}
+	return strconv.Atoi(port)
+}
 
 // TunnelStatus отдаёт текущее состояние туннеля.
 func (a *App) TunnelStatus() TunnelStatus {
@@ -67,11 +193,11 @@ func (a *App) startTunnel(p profile.Profile) error {
 	if err != nil {
 		return err
 	}
-	// Библиотеки может не быть при первом запуске - тогда качаем её.
+	// Обычно библиотеку уже принёс prepareWintun; сюда доходит только
+	// тот случай, когда скачать её не удалось.
 	if !wintun.Installed(dir) {
-		a.core.AppendLog("info", "Скачиваю компонент сетевого адаптера (wintun "+wintun.Version+")")
 		if err := wintun.Ensure(a.bg(), dir, nil); err != nil {
-			return err
+			return wintunDownloadError(err)
 		}
 	}
 
@@ -97,6 +223,18 @@ func (a *App) startTunnel(p profile.Profile) error {
 	a.core.AppendLog("info", "Туннель поднят: адаптер "+name+
 		", DNS "+formatAddrs(cfg.DNS)+", маршруты "+wg.FormatPrefixes(allowed))
 	return nil
+}
+
+// prepareWintun докачивает библиотеку адаптера, если её ещё нет.
+func (a *App) prepareWintun() {
+	dir, err := paths.Bin()
+	if err != nil || wintun.Installed(dir) {
+		return
+	}
+	a.core.AppendLog("info", "Скачиваю компонент сетевого адаптера (wintun "+wintun.Version+")")
+	if err := wintun.Ensure(a.bg(), dir, nil); err != nil {
+		a.core.AppendLog("warn", "Компонент сетевого адаптера не скачан: "+err.Error())
+	}
 }
 
 // tunnelNoise - служебные сообщения устройства. Их сотни на каждый подъём
@@ -210,8 +348,22 @@ func (a *App) raiseTunnelWhenReady(gen int64, p profile.Profile) {
 	a.emitTunnel()
 }
 
-// raiseTunnel готовит маршруты-исключения и поднимает туннель.
+// raiseTunnel готовит маршруты-исключения и поднимает туннель, а следом
+// раздачу в локальную сеть.
 func (a *App) raiseTunnel(gen int64, p profile.Profile) {
+	// Библиотека адаптера при первом запуске качается из сети, и это
+	// единственный долгий шаг подъёма. Под замком держать его нельзя:
+	// «Отключить», нажатое в это время, ждало бы конца скачивания.
+	// Ошибку здесь не разбираем - её покажет сам подъём туннеля.
+	a.prepareWintun()
+
+	a.raiseMu.Lock()
+	defer a.raiseMu.Unlock()
+
+	// Пока ждали замок, отключение могло уже пройти целиком.
+	if a.connectGen.Load() != gen {
+		return
+	}
 	a.tunnelErr.Store("")
 
 	// Маршруты для собственного трафика ядра нужно проложить до подъёма
@@ -227,8 +379,21 @@ func (a *App) raiseTunnel(gen int64, p profile.Profile) {
 		a.tunnelErr.Store(err.Error())
 		a.core.AppendLog("error", "Туннель не поднят: "+err.Error())
 		a.routes.Release()
+		a.emitTunnel()
+		return
 	}
 	a.emitTunnel()
+
+	// Раздача идёт поверх туннеля, поэтому поднимается только после него
+	// и только если он действительно встал.
+	if wantsSocks(p) {
+		a.socksErr.Store("")
+		if err := a.startSocks(gen, p); err != nil {
+			a.socksErr.Store(err.Error())
+			a.core.AppendLog("error", "Раздача в локальную сеть не включена: "+err.Error())
+		}
+		a.emitSocks()
+	}
 }
 
 // withPhysicalDNS задаёт ядру DNS физической сети.
@@ -261,8 +426,35 @@ func (a *App) pinCoreRoutes(p profile.Profile) {
 	a.routes.PinHosts(a.bg(), routes.VKHosts)
 }
 
+// stopTunnelIfCoreDown снимает туннель вслед за упавшим ядром.
+//
+// Проверка нужна из-за задержки: сообщение об остановке приходит в
+// отдельной горутине, и пользователь успевает нажать «Подключить» раньше,
+// чем она доберётся до дела. Без проверки запоздалое сообщение снимало бы
+// уже новый сеанс.
+func (a *App) stopTunnelIfCoreDown() {
+	if a.core.Running() {
+		return
+	}
+	a.stopTunnel()
+}
+
 // stopTunnel снимает туннель, если он поднят.
+//
+// Поколение меняем первым делом, до замка: отложенный подъём, который
+// сейчас идёт или только собирается, обязан увидеть, что он уже не нужен.
+// Иначе снятие прошло бы по пустому месту, а следом поднялся бы туннель,
+// который никто не ждёт.
 func (a *App) stopTunnel() {
+	a.connectGen.Add(1)
+
+	a.raiseMu.Lock()
+	defer a.raiseMu.Unlock()
+
+	// Раздачу снимаем первой: её соединения идут через туннель, и жить
+	// после его исчезновения им незачем.
+	a.stopSocks()
+
 	if !a.tunnel.Running() {
 		// Маршруты-исключения могли остаться от неудачной попытки.
 		a.routes.Release()
@@ -294,9 +486,48 @@ func (a *App) EnsureWintun() error {
 		return nil
 	}
 	if err := wintun.Ensure(a.bg(), dir, nil); err != nil {
-		return err
+		return wintunDownloadError(err)
 	}
 	return nil
+}
+
+// ImportWintun ставит библиотеку адаптера из выбранного файла.
+func (a *App) ImportWintun() error {
+	path, err := a.openFileDialog("Выберите архив или библиотеку wintun", []wailsruntime.FileFilter{
+		{DisplayName: "wintun (*.zip, *.dll)", Pattern: "*.zip;*.dll"},
+		{DisplayName: "Все файлы", Pattern: "*.*"},
+	})
+	if err != nil {
+		return err
+	}
+	if path == "" {
+		return nil
+	}
+
+	dir, err := paths.Bin()
+	if err != nil {
+		return err
+	}
+	if err := wintun.InstallFromFile(dir, path); err != nil {
+		return err
+	}
+	a.core.AppendLog("info", "Компонент сетевого адаптера установлен из файла "+filepath.Base(path))
+	return nil
+}
+
+// WintunSourceURL - адрес официального архива: его показывают рядом с
+// кнопкой импорта, чтобы было что открыть на машине с доступом в сеть.
+func (a *App) WintunSourceURL() string { return wintun.ArchiveURL }
+
+// wintunDownloadError объясняет обход, когда сайт недоступен.
+//
+// Ситуация замкнутая: wintun.net у многих открывается только через VPN,
+// а VPN без этой библиотеки не поднять. Молча оставлять человека с
+// сетевой ошибкой в такой ловушке нельзя.
+func wintunDownloadError(err error) error {
+	return fmt.Errorf("%w.\n\nСайт может быть недоступен без VPN. Скачайте архив %s "+
+		"на любой другой машине и укажите его на вкладке обновлений "+
+		"кнопкой «Выбрать файл» - приложение проверит его по контрольной сумме", err, wintun.ArchiveURL)
 }
 
 // WintunInstalled сообщает, готов ли компонент адаптера.

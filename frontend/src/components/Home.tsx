@@ -1,9 +1,12 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import {
   backend,
+  EVENTS,
+  onEvent,
   type CoreStatus,
   type Profile,
   type Snapshot,
+  type SocksStatus,
   type Traffic,
 } from "../lib/api";
 import { guard } from "../lib/effect";
@@ -24,13 +27,18 @@ export function Home({
   snap,
   phase,
   onEditProfile,
+  onAddServer,
 }: {
   core: CoreStatus | null;
   snap: Snapshot;
   phase: Phase;
   onEditProfile: (p: Profile) => void;
+  // onAddServer открывает мастер: с нуля сервер заводят через него, а
+  // редактор профиля остаётся для тонкой настройки готового.
+  onAddServer: () => void;
 }) {
   const [traffic, setTraffic] = useState<Traffic | null>(null);
+  const [socks, setSocks] = useState<SocksStatus | null>(null);
   const [query, setQuery] = useState("");
   const [expanded, setExpanded] = useState(false);
   const [importing, setImporting] = useState(false);
@@ -54,6 +62,24 @@ export function Home({
     read();
     const id = setInterval(read, 2000);
     return () => clearInterval(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }), [running]);
+
+  // Состояние раздачи приходит событием, а число подключённых меняется
+  // само по себе - поэтому пока ядро работает, ещё и опрос.
+  useEffect(() => guard("Home/socks", () => {
+    const off = onEvent<SocksStatus>(EVENTS.socks, setSocks);
+    if (!running) {
+      setSocks(null);
+      return off;
+    }
+    const read = () => api?.SocksStatus().then(setSocks);
+    read();
+    const id = setInterval(read, 2000);
+    return () => {
+      off();
+      clearInterval(id);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }), [running]);
 
@@ -197,6 +223,8 @@ export function Home({
               )}
             </div>
           )}
+
+          {phase.live && socks?.enabled && socks.up && <SocksChip socks={socks} />}
         </div>
       )}
 
@@ -253,7 +281,7 @@ export function Home({
             Импорт ссылки
           </Chip>
 
-          <Chip onClick={() => run(async () => onEditProfile((await api!.NewProfile("Новый сервер"))!))}>
+          <Chip onClick={onAddServer}>
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" className="text-zinc-500 dark:text-zinc-400">
               <path d="M12 5v14M5 12h14" />
             </svg>
@@ -338,8 +366,14 @@ export function Home({
         </div>
 
         {problem && (
-          <p className="rounded-xl bg-red-100 px-4 py-2.5 text-sm text-red-900 dark:bg-red-950 dark:text-red-200">
+          <p className="whitespace-pre-wrap rounded-xl bg-red-100 px-4 py-2.5 text-sm text-red-900 dark:bg-red-950 dark:text-red-200">
             {problem}
+          </p>
+        )}
+
+        {phase.live && !socks?.up && socks?.error && (
+          <p className="whitespace-pre-wrap rounded-xl bg-amber-100 px-4 py-2.5 text-xs text-amber-900 dark:bg-amber-950 dark:text-amber-200">
+            Раздача в локальную сеть не включилась: {socks.error}
           </p>
         )}
 
@@ -355,6 +389,45 @@ export function Home({
       {importing && <ImportDialog onClose={() => setImporting(false)} />}
       {sharing && <ShareDialog profile={sharing} onClose={() => setSharing(null)} />}
     </div>
+  );
+}
+
+/**
+ * Строчка про раздачу под счётчиками: адрес, который передают соседу, и
+ * сколько соединений живёт сейчас. Нажатие копирует адрес - его всё равно
+ * несут на другое устройство руками.
+ */
+function SocksChip({ socks }: { socks: SocksStatus }) {
+  const [copied, setCopied] = useState(false);
+  const addr = socks.hints?.[0] ?? socks.addr;
+
+  return (
+    <button
+      onClick={() => {
+        // Буфер обмена в WebView2 может и отказать - тогда подтверждения
+        // не будет, и человек хотя бы перепишет адрес глазами.
+        navigator.clipboard.writeText(addr).then(
+          () => {
+            setCopied(true);
+            setTimeout(() => setCopied(false), 1500);
+          },
+          () => {},
+        );
+      }}
+      title="Скопировать адрес для другого устройства"
+      className="flex items-center gap-2 rounded-full border border-emerald-300 bg-emerald-50 px-4 py-1.5 text-[13px] text-emerald-900 transition hover:bg-emerald-100 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-200 dark:hover:bg-emerald-950"
+    >
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
+        <path d="M5 12.5a9.5 9.5 0 0 1 14 0M8 16a5 5 0 0 1 8 0" />
+        <circle cx="12" cy="19.5" r="1" fill="currentColor" stroke="none" />
+      </svg>
+      <span>SOCKS5</span>
+      <span className="font-mono">{addr}</span>
+      {socks.active > 0 && (
+        <span className="text-emerald-700 dark:text-emerald-400">· {socks.active}</span>
+      )}
+      {copied && <span className="text-emerald-700 dark:text-emerald-400">· скопировано</span>}
+    </button>
   );
 }
 

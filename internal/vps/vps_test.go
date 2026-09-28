@@ -1,16 +1,22 @@
 package vps
 
 import (
+	"context"
 	"errors"
+	"net"
+	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/kamilsmtv/freeturn-windows/internal/profile"
 	"golang.org/x/crypto/ssh"
 )
 
 func TestParseOutputOK(t *testing.T) {
-	out := `{"proto":2,"result":"ok","stage":"probe","data":{"installed":true,"version":"v1.4.2","running":true,"wg":{"present":true,"port":51820}},"logs":["готово"]}`
+	out := `{"proto":3,"result":"ok","stage":"probe","data":{"installed":true,"running":true,` +
+		`"version":"v4.0.1","method":"docker","config":{"backend":"new","listen_port":56000,` +
+		`"mode":"udp","obf_profile":"rtpopus3","obf_key":"ab","wg_port":51820}},"logs":["готово"]}`
 
 	r := ParseOutput(out)
 	if !r.OK() || r.Stage != "probe" {
@@ -20,8 +26,11 @@ func TestParseOutputOK(t *testing.T) {
 	if err := r.Decode(&d); err != nil {
 		t.Fatalf("Decode: %v", err)
 	}
-	if !d.Installed || d.Version != "v1.4.2" || !d.WG.Present || d.WG.Port != 51820 {
+	if !d.Installed || d.Version != "v4.0.1" || d.Method != "docker" {
 		t.Errorf("данные probe разобраны неверно: %+v", d)
+	}
+	if d.Config.ListenPort != 56000 || d.Config.ObfProfile != "rtpopus3" || d.Config.WGPort != 51820 {
+		t.Errorf("параметры сервера разобраны неверно: %+v", d.Config)
 	}
 	if len(r.Logs) != 1 {
 		t.Errorf("журнал команды потерян: %+v", r.Logs)
@@ -73,17 +82,16 @@ func TestDecodeBase64(t *testing.T) {
 	}
 }
 
-func TestStartArgs(t *testing.T) {
-	o := InstallOptions{
-		Listen: "0.0.0.0:56000", Connect: "127.0.0.1:51820", Mode: profile.ModeUDP,
-		ObfProfile: profile.ObfRtpOpus3, ObfKey: strings.Repeat("ab", 32), ObfTimingMs: 20,
-		ClientID: strings.Repeat("0", 32),
+func TestApplyArgs(t *testing.T) {
+	o := ApplyOptions{
+		Host: "203.0.113.10", ListenPort: 56000, Mode: profile.ModeUDP,
+		ObfProfile: profile.ObfRtpOpus3, ObfKey: strings.Repeat("ab", 32),
 	}
-	got := strings.Join(StartArgs(o), " ")
+	got := strings.Join(ApplyArgs(o), " ")
 
 	for _, want := range []string{
-		"start", "--listen=0.0.0.0:56000", "--connect=127.0.0.1:51820",
-		"--mode=udp", "--obf-profile=rtpopus3", "--obf-timing=20ms", "--client-id=",
+		"apply", "--backend=new", "--host=203.0.113.10", "--listen-port=56000",
+		"--mode=udp", "--obf-profile=rtpopus3", "--obf-key=",
 	} {
 		if !strings.Contains(got, want) {
 			t.Errorf("в %q нет %q", got, want)
@@ -92,32 +100,39 @@ func TestStartArgs(t *testing.T) {
 	if strings.Contains(got, "--kcp-") {
 		t.Error("в режиме udp профиль ARQ передавать нельзя")
 	}
+	if strings.Contains(got, "--connect=") {
+		t.Error("своему бэкенду адрес чужого VPN не нужен")
+	}
 }
 
-func TestStartArgsKCPOnlyForTCP(t *testing.T) {
-	o := InstallOptions{
-		Listen: "0.0.0.0:56000", Connect: "127.0.0.1:443", Mode: profile.ModeTCP,
+// Режим проброса tcp живёт только поверх чужого бэкенда, и адрес его
+// обязателен: без --connect серверу некуда отдавать трафик.
+func TestApplyArgsExternalBackend(t *testing.T) {
+	o := ApplyOptions{
+		Backend: BackendExternal, Connect: "127.0.0.1:443", Mode: profile.ModeTCP,
 		KCP: profile.MobileKCP(), KCPCustom: true,
 	}
-	got := strings.Join(StartArgs(o), " ")
-	for _, want := range []string{"--mode=tcp", "--kcp-interval=40", "--kcp-acknodelay=false"} {
+	got := strings.Join(ApplyArgs(o), " ")
+	for _, want := range []string{"--backend=external", "--connect=127.0.0.1:443", "--mode=tcp",
+		"--kcp-interval=40", "--kcp-acknodelay=false"} {
 		if !strings.Contains(got, want) {
 			t.Errorf("в %q нет %q", got, want)
 		}
 	}
 
 	o.Mode = profile.ModeUDP
-	if strings.Contains(strings.Join(StartArgs(o), " "), "--kcp-") {
+	if strings.Contains(strings.Join(ApplyArgs(o), " "), "--kcp-") {
 		t.Error("профиль ARQ уехал в udp-режим")
 	}
 }
 
-func TestStartArgsWithoutObf(t *testing.T) {
-	got := strings.Join(StartArgs(InstallOptions{
-		Listen: "0.0.0.0:56000", Connect: "127.0.0.1:51820", ObfProfile: profile.ObfNone,
-	}), " ")
-	if strings.Contains(got, "--obf-") {
-		t.Errorf("выключенная обфускация не должна давать аргументов: %q", got)
+func TestApplyArgsWithoutObf(t *testing.T) {
+	got := strings.Join(ApplyArgs(ApplyOptions{ListenPort: 56000, ObfProfile: profile.ObfNone}), " ")
+	if strings.Contains(got, "--obf-key") {
+		t.Errorf("выключенной обфускации ключ не нужен: %q", got)
+	}
+	if !strings.Contains(got, "--obf-profile=none") {
+		t.Errorf("профиль обфускации должен быть передан явно: %q", got)
 	}
 }
 
@@ -153,33 +168,69 @@ func TestExplainDropsDuplicateDetails(t *testing.T) {
 	}
 }
 
-// Ключи и адрес клиента выдаёт сервер, поэтому peer-add обязан получить
-// имя и endpoint: без них install.sh отвечает bad_arg.
-func TestPeerAddArgs(t *testing.T) {
-	got := strings.Join(PeerAddArgs(PeerOptions{
-		NameB64:  "d2luZG93cw==",
-		Endpoint: "127.0.0.1:9000",
-		ClientID: strings.Repeat("a", 32),
-		DNS:      "1.1.1.1",
-	}), " ")
+// Сервер сам заводит доступ, генерирует Client ID и собирает ссылку -
+// от нас нужно только имя.
+func TestClientListDecode(t *testing.T) {
+	out := `{"proto":3,"result":"ok","stage":"client_list","data":{"clients":[` +
+		`{"name":"owner","client_id":"aa","self":true,"ip":"10.66.0.2","pub":"K1","hs":1750000000},` +
+		`{"name":"phone","client_id":"bb","self":false,"ip":"10.66.0.3","pub":"K2","hs":0}],` +
+		`"share":{"backend":"new","host":"203.0.113.10","port":56000,"mode":"udp",` +
+		`"obf_profile":"rtpopus3","obf_key":"cc"}},"logs":[]}`
 
-	for _, want := range []string{
-		"peer-add", "--name-b64=d2luZG93cw==", "--endpoint=127.0.0.1:9000",
-		"--client-id=", "--dns=1.1.1.1",
-	} {
-		if !strings.Contains(got, want) {
-			t.Errorf("в %q нет %q", got, want)
-		}
+	var d ClientListData
+	if err := ParseOutput(out).Decode(&d); err != nil {
+		t.Fatalf("Decode: %v", err)
+	}
+	if len(d.Clients) != 2 {
+		t.Fatalf("доступов разобрано %d", len(d.Clients))
+	}
+	if !d.Clients[0].Self || d.Clients[0].Name != OwnerName {
+		t.Errorf("владелец не распознан: %+v", d.Clients[0])
+	}
+	if d.Clients[1].HS != 0 || d.Clients[1].IP != "10.66.0.3" {
+		t.Errorf("доступ гостя разобран неверно: %+v", d.Clients[1])
+	}
+	if d.Share.Port != 56000 || d.Share.ObfProfile != "rtpopus3" {
+		t.Errorf("параметры раздачи разобраны неверно: %+v", d.Share)
 	}
 }
 
-func TestPeerAddArgsDefaultsEndpoint(t *testing.T) {
-	got := strings.Join(PeerAddArgs(PeerOptions{NameB64: "eA=="}), " ")
-	if !strings.Contains(got, "--endpoint="+profile.DefaultListen) {
-		t.Errorf("без endpoint должен подставляться локальный сокет ядра: %q", got)
+// Готовую ссылку и конфигурацию сервер отдаёт прямо в ответе client-add.
+func TestClientAddDecode(t *testing.T) {
+	out := `{"proto":3,"result":"ok","stage":"client_add","data":{` +
+		`"client":{"name":"phone","client_id":"bb","ip":"10.66.0.3"},` +
+		`"conf_b64":"W0ludGVyZmFjZV0=","link":"freeturn://eyJ2IjoxfQ"},"logs":[]}`
+
+	var d ClientData
+	if err := ParseOutput(out).Decode(&d); err != nil {
+		t.Fatalf("Decode: %v", err)
 	}
-	if strings.Contains(got, "--dns=") || strings.Contains(got, "--client-id=") {
-		t.Errorf("пустые параметры не должны попадать в команду: %q", got)
+	if d.Client.Name != "phone" || d.Link == "" {
+		t.Fatalf("доступ разобран неверно: %+v", d)
+	}
+	if DecodeBase64(d.ConfB64) != "[Interface]" {
+		t.Errorf("конфигурация не развернулась: %q", d.ConfB64)
+	}
+}
+
+// Журнал в протоколе 3 приходит массивом строк, а не одним base64-полем.
+func TestLogsDecode(t *testing.T) {
+	out := `{"proto":3,"result":"ok","stage":"logs","data":{"lines":["первая","вторая"]},"logs":[]}`
+	var d LogsData
+	if err := ParseOutput(out).Decode(&d); err != nil {
+		t.Fatalf("Decode: %v", err)
+	}
+	if len(d.Lines) != 2 || d.Lines[1] != "вторая" {
+		t.Errorf("журнал разобран неверно: %+v", d.Lines)
+	}
+}
+
+// Команды протокола 2 новый скрипт не знает, и объяснение должно вести к
+// переустановке, а не к загадочному "неверный аргумент".
+func TestExplainOldServer(t *testing.T) {
+	text := Explain(Response{Result: "err", Code: "bad_arg", Msg: "unknown command: install"})
+	if !strings.Contains(text, "старой версией install.sh") {
+		t.Errorf("нет подсказки про устаревший сервер: %s", text)
 	}
 }
 
@@ -208,17 +259,6 @@ func TestExplainFallsBackToStderr(t *testing.T) {
 	}
 	if got := Explain(r); !strings.Contains(got, "Не удалось сгенерировать ключи VPN.") {
 		t.Errorf("сообщение из stderr потеряно: %q", got)
-	}
-}
-
-// Заводить пиров можно только на AmneziaWG: обычный WireGuard тоже даёт
-// wg_backend=true, но peer-add на нём срывается.
-func TestCanAddPeers(t *testing.T) {
-	if (ShareInfoData{WGBackend: true}).CanAddPeers() {
-		t.Error("обычный WireGuard не годится для peer-add")
-	}
-	if !(ShareInfoData{WGBackend: true, BackendType: BackendAWG}).CanAddPeers() {
-		t.Error("на AmneziaWG пиров заводить можно")
 	}
 }
 
@@ -294,41 +334,123 @@ func TestAsOutput(t *testing.T) {
 	}
 }
 
-func TestExplainWGSetupHint(t *testing.T) {
-	text := Explain(Response{
-		Result: "err",
-		Code:   "internal",
-		Stage:  "wg_setup",
-		Msg:    "unexpected exit 1",
-	})
-	if !strings.Contains(text, "ключи AmneziaWG") {
-		t.Fatalf("нет подсказки про ключи: %s", text)
+// Чужая версия протокола означает, что поля data мы поняли бы неверно:
+// такой ответ обязан отвергаться, а не разбираться наугад.
+func TestCheckProto(t *testing.T) {
+	if err := checkProto(Response{Proto: ProtoVersion, Result: "ok"}); err != nil {
+		t.Errorf("своя версия отвергнута: %v", err)
+	}
+	// Транспортные ошибки поля proto не несут.
+	if err := checkProto(Response{Result: "err", Code: "transport"}); err != nil {
+		t.Errorf("ответ без версии отвергнут: %v", err)
+	}
+
+	old := checkProto(Response{Proto: 2, Result: "ok"})
+	if old == nil || !strings.Contains(old.Error(), "старой версией") {
+		t.Errorf("старый сервер не распознан: %v", old)
+	}
+	newer := checkProto(Response{Proto: 99, Result: "ok"})
+	if newer == nil || !strings.Contains(newer.Error(), "обновите FreeTurn") {
+		t.Errorf("новый сервер не распознан: %v", newer)
 	}
 }
 
-func TestClassifyWGTools(t *testing.T) {
-	if installed, err := classifyWGTools("present\n", "", nil); installed || err != nil {
-		t.Fatalf("готовый сервер: installed=%v err=%v", installed, err)
+// Имя доступа уходит в имена файлов на сервере, и правила там жёсткие.
+// Проверяем до отправки: иначе скрипт ответит bad_arg, а тот по коду
+// объясняется как «версии разошлись» - и причина теряется.
+func TestValidClientName(t *testing.T) {
+	ok := []string{"phone", "Kamil-PC", "nb_2026", "a", strings.Repeat("x", 32)}
+	for _, name := range ok {
+		if !ValidClientName(name) {
+			t.Errorf("имя %q отвергнуто", name)
+		}
 	}
-	if installed, err := classifyWGTools("installed\n", "", nil); !installed || err != nil {
-		t.Fatalf("установка пакета: installed=%v err=%v", installed, err)
+	bad := []string{"", "Телефон", "phone Камиля", "with space", "-starts", ".dot",
+		strings.Repeat("x", 33), "semi;colon", "../etc"}
+	for _, name := range bad {
+		if ValidClientName(name) {
+			t.Errorf("имя %q принято", name)
+		}
 	}
-	// Вывод sudo может приехать вместе с меткой - это не должно мешать.
-	_, err := classifyWGTools("", "sudo: unable to resolve host\nno-package-manager\n", errors.New("exit 2"))
-	if err == nil || !strings.Contains(err.Error(), "вручную") {
-		t.Fatalf("нераспознанный пакетный менеджер: %v", err)
+}
+
+// Значения бэкенда живут в двух местах: в профиле (что выбрал человек) и
+// в протоколе (что понимает скрипт). Разойдясь, они молча переключили бы
+// сервер не туда, поэтому равенство закрепляем тестом.
+func TestBackendConstantsMatchProfile(t *testing.T) {
+	if BackendNew != profile.ServerBackendNew {
+		t.Errorf("new: протокол %q, профиль %q", BackendNew, profile.ServerBackendNew)
 	}
-	_, err = classifyWGTools("", "docker-image-missing", errors.New("exit 4"))
-	if err == nil || !strings.Contains(err.Error(), "образ AmneziaWG") {
-		t.Fatalf("недоступный образ: %v", err)
+	if BackendExternal != profile.ServerBackendExternal {
+		t.Errorf("external: протокол %q, профиль %q", BackendExternal, profile.ServerBackendExternal)
 	}
-	_, err = classifyWGTools("", "install-failed", errors.New("exit 3"))
-	if err == nil || !strings.Contains(err.Error(), "wireguard-tools") {
-		t.Fatalf("неудачная установка: %v", err)
+}
+
+// Молчащий сервер не должен держать интерфейс вечно: сервер, который
+// принял соединение и замолчал, - обычное дело (файрвол, перегрузка), а
+// поле Timeout пакета ssh на этот путь не распространяется.
+func TestDialTimesOutOnSilentServer(t *testing.T) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("слушатель: %v", err)
 	}
-	// Пустой ответ - тоже отказ, но объяснимый.
-	_, err = classifyWGTools("", "", nil)
-	if err == nil || !strings.Contains(err.Error(), "ничего не ответил") {
-		t.Fatalf("пустой ответ: %v", err)
+	defer func() { _ = ln.Close() }()
+	// Принимаем и молчим: рукопожатие не начнётся никогда.
+	go func() {
+		for {
+			c, err := ln.Accept()
+			if err != nil {
+				return
+			}
+			defer func() { _ = c.Close() }()
+		}
+	}()
+
+	host, port, _ := net.SplitHostPort(ln.Addr().String())
+	n, _ := strconv.Atoi(port)
+	cfg := profile.SSH{IP: host, Port: n, Username: "root",
+		Password: "x", AuthType: profile.AuthPassword, HostFingerprint: "SHA256:x"}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	start := time.Now()
+	_, err = dial(ctx, cfg)
+	spent := time.Since(start)
+
+	if err == nil {
+		t.Fatal("молчащий сервер должен давать ошибку, а не висеть")
+	}
+	if spent > 5*time.Second {
+		t.Errorf("рукопожатие висело %s, а предел команды был 2 с", spent)
+	}
+	if !strings.Contains(err.Error(), "не ответил") {
+		t.Errorf("невнятная причина: %v", err)
+	}
+	if !strings.Contains(err.Error(), "подождите") {
+		t.Errorf("нет подсказки, что делать: %v", err)
+	}
+}
+
+// Установка тянет пакеты минутами, а чтение состояния - секунды: один
+// предел на всё либо рвал бы установку, либо не спасал от зависания.
+func TestCommandTimeout(t *testing.T) {
+	if got := commandTimeout([]string{"apply"}); got != applyTimeout {
+		t.Errorf("apply: %s", got)
+	}
+	if got := commandTimeout([]string{"probe"}); got != defaultTimeout {
+		t.Errorf("probe: %s", got)
+	}
+	if got := commandTimeout(nil); got != defaultTimeout {
+		t.Errorf("без команды: %s", got)
+	}
+}
+
+func TestTimeoutMessage(t *testing.T) {
+	if msg := TimeoutMessage(context.DeadlineExceeded); !strings.Contains(msg, "не ответил") {
+		t.Errorf("нет объяснения: %q", msg)
+	}
+	if msg := TimeoutMessage(errors.New("другое")); msg != "" {
+		t.Errorf("чужая ошибка объяснена как таймаут: %q", msg)
 	}
 }

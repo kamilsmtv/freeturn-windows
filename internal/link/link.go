@@ -30,6 +30,7 @@ type Link struct {
 	Peer           string `json:"peer"`
 	Transport      string `json:"transport,omitempty"`
 	Mode           string `json:"mode,omitempty"`
+	Bond           bool   `json:"bond,omitempty"`
 	Obf            string `json:"obf,omitempty"`
 	Key            string `json:"key,omitempty"`
 	N              int    `json:"n,omitempty"`
@@ -148,6 +149,7 @@ func FromProfile(p profile.Profile, includeVKLink bool, clientID string) Link {
 	}
 	if p.Opts.TCPMode() {
 		l.Mode = profile.ModeTCP
+		l.Bond = p.Client.Bond
 		if p.Opts.KCP != profile.DefaultKCP() {
 			k := KCP(p.Opts.KCP)
 			l.KCP = &k
@@ -213,6 +215,7 @@ func (l Link) ToProfile() profile.Profile {
 
 	if l.Mode == profile.ModeTCP {
 		p.Opts.ProxyMode = profile.ModeTCP
+		p.Client.Bond = l.Bond
 	}
 	if l.KCP != nil {
 		p.Opts.KCP = profile.KCP(*l.KCP)

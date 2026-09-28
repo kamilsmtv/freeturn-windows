@@ -32,13 +32,17 @@ func (a *App) CoreClearLog() { a.core.ClearLog() }
 // CoreStart запускает ядро с переданным профилем.
 func (a *App) CoreStart(p profile.Profile) error {
 	if !a.updates.Installed() {
-		return errors.New("ядро ещё не скачано - нажмите «Скачать ядро» на вкладке обновлений")
+		return errors.New("ядро ещё не скачано - откройте вкладку обновлений: «Скачать ядро», " +
+			"а если GitHub недоступен - «Выбрать файл»")
 	}
 	// В режиме VPN ядру нужен DNS физической сети: DNS туннеля станет ему
 	// недоступен ровно тогда, когда туннель поднимется.
 	p = withPhysicalDNS(p)
 	a.lastProfile.Store(&p)
 	a.tunnelErr.Store("")
+	// Ошибка прошлого сеанса к новому отношения не имеет, а на экране
+	// висела бы до первой удачной раздачи.
+	a.socksErr.Store("")
 
 	if err := a.core.Start(p); err != nil {
 		return err
@@ -60,6 +64,15 @@ func (a *App) CoreStart(p profile.Profile) error {
 		a.core.AppendLog("warn", a.tunnelErr.Load())
 		a.emitTunnel()
 	}
+	// Раздача живёт поверх туннеля, поэтому в режиме прокси её не будет.
+	// Молчать нельзя: человек включил переключатель и ждёт результата.
+	if p.Client.SocksHotspot && !wantsTunnel(p) {
+		a.socksErr.Store("раздача в локальную сеть включена, но профиль работает " +
+			"в режиме прокси - раздавать нечего")
+		a.core.AppendLog("warn", a.socksErr.Load())
+		a.emitSocks()
+	}
+
 	s := a.settings.Get()
 	if s.LastProfileID != p.ID {
 		s.LastProfileID = p.ID
@@ -102,6 +115,34 @@ func (a *App) InstallCore() (updater.Status, error) {
 	a.emit(EventUpdateStatus, st)
 	return st, err
 }
+
+// ImportCore ставит ядро из выбранного файла.
+//
+// Нужен там, где GitHub недоступен: скачать бинарь можно на другой машине,
+// а приложение проверит его контрольной суммой (если рядом лежит
+// checksums.txt) и запуском.
+func (a *App) ImportCore() (updater.Status, error) {
+	path, err := a.openFileDialog("Выберите бинарь ядра", []runtime.FileFilter{
+		{DisplayName: "Ядро (*.exe)", Pattern: "*.exe"},
+		{DisplayName: "Все файлы", Pattern: "*.*"},
+	})
+	// Статус здесь собираем без сети: ручной выбор файла нужен как раз
+	// тогда, когда GitHub не отвечает, и ждать его таймаута незачем.
+	if err != nil {
+		return a.updates.LocalStatus(a.bg()), err
+	}
+	if path == "" {
+		return a.updates.LocalStatus(a.bg()), nil
+	}
+
+	st, err := a.updates.InstallFromFile(a.bg(), path)
+	a.emit(EventUpdateStatus, st)
+	return st, err
+}
+
+// CoreAssetName - имя файла ядра в релизе: показываем рядом с кнопкой
+// импорта, чтобы человек знал, что именно качать.
+func (a *App) CoreAssetName() string { return updater.AssetName }
 
 // RollbackCore возвращает предыдущую версию ядра.
 func (a *App) RollbackCore() (updater.Status, error) {

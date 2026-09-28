@@ -26,3 +26,13 @@ export function uptime(startedAt: string): string {
   if (m > 0) return `${m} мин ${String(s).padStart(2, "0")} с`;
   return `${s} с`;
 }
+
+/**
+ * Имя доступа на сервере: те же правила, что у valid_name в install.sh.
+ *
+ * Имя уходит в имена файлов на сервере, поэтому кириллицы там нет. Проверяем
+ * на своей стороне, иначе отказ прилетает уже после похода по SSH.
+ */
+export function validClientName(name: string): boolean {
+  return /^[A-Za-z0-9][A-Za-z0-9._-]{0,31}$/.test(name.trim());
+}

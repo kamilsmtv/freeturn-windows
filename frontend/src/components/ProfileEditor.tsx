@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { backend, type Profile } from "../lib/api";
-import { Button, Card } from "./ui";
+import { Button, Card, Toggle } from "./ui";
 import { CheckBox, Field, NumberInput, Picker, TextArea, TextInput } from "./Field";
 
 /**
@@ -13,11 +13,15 @@ export function ProfileEditor({
   onChange,
   onSave,
   onCancel,
+  onOpenServer,
 }: {
   profile: Profile;
   onChange: (p: Profile) => void;
   onSave: () => void;
   onCancel: () => void;
+  // onOpenServer уводит на вкладку сервера, сохранив правки: без доступа
+  // по SSH половина кнопок профиля всё равно не работает.
+  onOpenServer: () => void;
 }) {
   const [advanced, setAdvanced] = useState(false);
   const [wgPreview, setWgPreview] = useState("");
@@ -30,6 +34,11 @@ export function ProfileEditor({
     onChange({ ...profile, client: { ...profile.client, ...patch } });
   const opts = (patch: Partial<Profile["opts"]>) =>
     onChange({ ...profile, opts: { ...profile.opts, ...patch } });
+
+  // В режиме direct реле не участвует, и всё, что его касается, ядро
+  // игнорирует - показывать такие поля значит обещать несбыточное.
+  const direct = profile.client.provider === "direct";
+  const tcp = profile.opts.proxyMode === "tcp";
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
@@ -67,15 +76,34 @@ export function ProfileEditor({
             />
           </Field>
           <Field
-            label="Ссылка на звонок VK Calls"
-            hint="Создайте звонок и не завершайте его — по нему клиент получает TURN-данные"
+            label="Как идти до сервера"
+            hint={
+              direct
+                ? "Напрямую на адрес сервера. Не сработает, если оператор его блокирует"
+                : "Потоки идут через TURN-серверы звонков — обходит блокировку адреса"
+            }
           >
-            <TextInput
-              value={profile.client.vkLink}
-              onChange={(vkLink) => client({ vkLink })}
-              placeholder="https://vk.ru/call/join/…"
+            <Picker
+              value={profile.client.provider || "vk"}
+              onChange={(provider) => client({ provider })}
+              options={[
+                { value: "vk", label: "Через реле звонков" },
+                { value: "direct", label: "Напрямую (без реле)" },
+              ]}
             />
           </Field>
+          {!direct && (
+            <Field
+              label="Ссылка на звонок VK Calls"
+              hint="Создайте звонок и не завершайте его — по нему клиент получает TURN-данные"
+            >
+              <TextInput
+                value={profile.client.vkLink}
+                onChange={(vkLink) => client({ vkLink })}
+                placeholder="https://vk.ru/call/join/…"
+              />
+            </Field>
+          )}
           <Field label="Локальный адрес" hint="Сюда подключается WireGuard или Xray">
             <TextInput value={profile.client.localPort} onChange={(localPort) => client({ localPort })} />
           </Field>
@@ -176,6 +204,23 @@ export function ProfileEditor({
           </button>
         </div>
 
+        {/* Режим прокси часто выбирают ради связки с 3x-ui, и тут важно
+            сказать то, о чём иначе узнают опытным путём: своего туннеля не
+            будет, клиент нужен отдельный. Android-клиент пишет то же самое. */}
+        {profile.client.tunnelTransport !== "wireguard" && (
+          <div className="mt-3 flex flex-col gap-1 rounded-xl border border-zinc-200 px-4 py-3 text-xs text-zinc-500 dark:border-zinc-800 dark:text-zinc-400">
+            <span>
+              {tcp
+                ? "TCP-форвардер: локальный порт слушает Xray или sing-box, свой туннель не поднимается. Конфигурацию возьмите в своей панели (например 3x-ui) и замените в ней адрес сервера на локальный адрес выше."
+                : "UDP-релей: локальный порт принимает трафик WireGuard. Свой туннель приложение не поднимает — клиент запускаете сами."}
+            </span>
+            <span>
+              Если VPN на этой машине держит другая программа, исключите из её туннеля адрес
+              сервера — иначе трафик зациклится.
+            </span>
+          </div>
+        )}
+
         {profile.client.tunnelTransport === "wireguard" && (
           <div className="mt-3">
             {profile.client.wireGuardConfig.trim() ? (
@@ -232,7 +277,18 @@ export function ProfileEditor({
                 </Button>
               </div>
             )}
-            {wgError && <p className="pt-2 text-sm text-red-600 dark:text-red-400">{wgError}</p>}
+            {wgError && (
+              <div className="flex flex-col gap-2 pt-2">
+                <p className="text-sm text-red-600 dark:text-red-400">{wgError}</p>
+                {needsSSH(wgError) && (
+                  <div>
+                    <Button variant="primary" onClick={onOpenServer}>
+                      Заполнить доступ по SSH
+                    </Button>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         )}
       </Card>
@@ -258,16 +314,18 @@ export function ProfileEditor({
                   ]}
                 />
               </Field>
-              <Field label="Транспорт до TURN (-transport)">
-                <Picker
-                  value={profile.client.useUdp ? "udp" : "tcp"}
-                  onChange={(v) => client({ useUdp: v === "udp" })}
-                  options={[
-                    { value: "tcp", label: "tcp (по умолчанию)" },
-                    { value: "udp", label: "udp" },
-                  ]}
-                />
-              </Field>
+              {!direct && (
+                <Field label="Транспорт до TURN (-transport)">
+                  <Picker
+                    value={profile.client.useUdp ? "udp" : "tcp"}
+                    onChange={(v) => client({ useUdp: v === "udp" })}
+                    options={[
+                      { value: "tcp", label: "tcp (по умолчанию)" },
+                      { value: "udp", label: "udp" },
+                    ]}
+                  />
+                </Field>
+              )}
               <Field label="Пейсинг мимикрии, мс (-obf-timing)" hint="0 — выключен, максимум 60">
                 <NumberInput
                   value={profile.opts.obfTimingMs}
@@ -276,16 +334,21 @@ export function ProfileEditor({
                   onChange={(obfTimingMs) => opts({ obfTimingMs })}
                 />
               </Field>
-              <Field label="Потоков TURN (-n)">
+              <Field
+                label={direct ? "Потоков (-n)" : "Потоков TURN (-n)"}
+                hint={direct ? "Дефолт ядра для direct — 1" : "Дефолт ядра — 12"}
+              >
                 <NumberInput value={profile.client.threads} min={1} onChange={(threads) => client({ threads })} />
               </Field>
-              <Field label="Потоков на учётку (-streams-per-cred)">
-                <NumberInput
-                  value={profile.client.streamsPerCred}
-                  min={1}
-                  onChange={(streamsPerCred) => client({ streamsPerCred })}
-                />
-              </Field>
+              {!direct && (
+                <Field label="Потоков на учётку (-streams-per-cred)" hint="Дефолт ядра — 12">
+                  <NumberInput
+                    value={profile.client.streamsPerCred}
+                    min={1}
+                    onChange={(streamsPerCred) => client({ streamsPerCred })}
+                  />
+                </Field>
+              )}
               <Field label="Client ID" hint="Владелец сервера добавляет его в allowlist">
                 <div className="flex items-center gap-2">
                   <TextInput value={profile.client.clientId} onChange={(clientId) => client({ clientId })} mono />
@@ -348,7 +411,22 @@ export function ProfileEditor({
             )}
           </Card>
 
-          {profile.opts.proxyMode === "tcp" && (
+          {tcp && (
+            <Card title="Объединение сессий (-bond)">
+              <div className="flex items-start justify-between gap-4">
+                <div className="flex flex-col gap-0.5">
+                  <span className="text-sm font-medium">Одно TCP-соединение на все сессии</span>
+                  <span className="text-xs text-zinc-500 dark:text-zinc-400">
+                    Меньше соединений наружу — меньше поводов попасть под лимиты. Нужен сервер
+                    версии 4.0 и новее: со старым подключение не поднимется.
+                  </span>
+                </div>
+                <Toggle checked={profile.client.bond} onChange={(bond) => client({ bond })} />
+              </div>
+            </Card>
+          )}
+
+          {tcp && (
             <Card title="KCP (только режим tcp)">
               <div className="grid gap-3 md:grid-cols-4">
                 {(
@@ -549,7 +627,75 @@ export function ProfileEditor({
                 </div>
               </div>
             )}
-            {wgError && <p className="pt-2 text-sm text-red-600 dark:text-red-400">{wgError}</p>}
+            {wgError && (
+              <div className="flex flex-col gap-2 pt-2">
+                <p className="text-sm text-red-600 dark:text-red-400">{wgError}</p>
+                {needsSSH(wgError) && (
+                  <div>
+                    <Button variant="primary" onClick={onOpenServer}>
+                      Заполнить доступ по SSH
+                    </Button>
+                  </div>
+                )}
+              </div>
+            )}
+          </Card>
+
+          <Card title="Раздача в локальную сеть">
+            <div className="flex items-start justify-between gap-4">
+              <div className="flex flex-col gap-0.5">
+                <span className="text-sm font-medium">SOCKS5 для соседей по сети</span>
+                <span className="text-xs text-zinc-500 dark:text-zinc-400">
+                  Телефон или второй компьютер ходят через этот туннель, указав адрес и порт в
+                  настройках прокси. Работает только в режиме VPN.
+                </span>
+              </div>
+              <Toggle
+                checked={profile.client.socksHotspot}
+                onChange={(socksHotspot) => client({ socksHotspot })}
+              />
+            </div>
+
+            {profile.client.socksHotspot && (
+              <>
+                <div className="grid gap-3 pt-3 md:grid-cols-2">
+                  <Field label="Адрес раздачи" hint="0.0.0.0 — слушать на всех интерфейсах">
+                    <TextInput
+                      value={profile.client.socksListen}
+                      placeholder="0.0.0.0:1080"
+                      onChange={(socksListen) => client({ socksListen })}
+                    />
+                  </Field>
+                  <Field label="Логин">
+                    <TextInput
+                      value={profile.client.socksUser}
+                      onChange={(socksUser) => client({ socksUser })}
+                    />
+                  </Field>
+                  <Field label="Пароль">
+                    <TextInput
+                      type="password"
+                      value={profile.client.socksPassword}
+                      onChange={(socksPassword) => client({ socksPassword })}
+                    />
+                  </Field>
+                </div>
+
+                {profile.client.tunnelTransport !== "wireguard" && (
+                  <p className="mt-3 rounded-lg bg-amber-100 px-3 py-2 text-xs text-amber-900 dark:bg-amber-950 dark:text-amber-200">
+                    Сейчас профиль работает в режиме прокси — раздавать нечего. Включите режим VPN
+                    в карточке «WireGuard» выше.
+                  </p>
+                )}
+
+                <p className="mt-3 text-xs text-zinc-500 dark:text-zinc-400">
+                  Логин и пароль обязательны: открытый SOCKS5 в общей сети найдут и начнут
+                  использовать посторонние. Порт приложение открывает в брандмауэре само, но только
+                  для частной и доменной сети. Если Windows считает вашу сеть общедоступной,
+                  соединения не дойдут, пока в её свойствах не выбрать «Частная».
+                </p>
+              </>
+            )}
           </Card>
 
           <Card title="Сервер">
@@ -564,4 +710,13 @@ export function ProfileEditor({
       </div>
     </div>
   );
+}
+
+/**
+ * Ошибка про доступ по SSH — единственная, которую нельзя исправить в
+ * самом профиле: поля живут на вкладке сервера. Показываем к ней кнопку,
+ * иначе человек упирается в текст и не понимает, куда идти.
+ */
+function needsSSH(error: string): boolean {
+  return error.includes("SSH") || error.includes("ssh");
 }

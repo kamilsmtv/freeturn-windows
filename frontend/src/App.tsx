@@ -16,7 +16,7 @@ import { useBusyLabel, useBusyWhile } from "./lib/busy";
 import { connectionPhase, runningProfile } from "./lib/phase";
 import { guard } from "./lib/effect";
 import { applyTheme } from "./lib/theme";
-import { Card, EmptyState } from "./components/ui";
+import { Button, Card, EmptyState } from "./components/ui";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { About } from "./components/About";
 import { Home } from "./components/Home";
@@ -25,6 +25,7 @@ import { ProfileEditor } from "./components/ProfileEditor";
 import { Rail, type Screen } from "./components/Rail";
 import { TopProgress } from "./components/TopProgress";
 import { ServerPanel } from "./components/ServerPanel";
+import { ServerWizard } from "./components/ServerWizard";
 import { SettingsScreen } from "./components/SettingsScreen";
 import { Updates } from "./components/Updates";
 
@@ -35,6 +36,8 @@ export default function App() {
   const [settings, setSettings] = useState<Settings | null>(null);
   const [core, setCore] = useState<CoreStatus | null>(null);
   const [draft, setDraft] = useState<Profile | null>(null);
+  // Мастер перекрывает экран целиком, как и редактор профиля.
+  const [wizard, setWizard] = useState(false);
   const [snap, setSnap] = useState<Snapshot>({ list: [], activeId: "" });
   const [tunnel, setTunnel] = useState<TunnelStatus | null>(null);
 
@@ -89,12 +92,45 @@ export default function App() {
     backend()?.SaveSettings(next);
   };
 
+  // Добавление сервера идёт мастером: доступ, установка, подключение -
+  // одним экраном сверху вниз. Разложенные по двум вкладкам профиль и
+  // сервер читались как две несвязанные сущности, и начать было неоткуда.
+  const addServer = () => {
+    setDraft(null);
+    setWizard(true);
+  };
+
+  // Из профиля к доступу по SSH: правки сначала сохраняем, иначе вкладка
+  // сервера работала бы с прежней версией профиля.
+  const openServerFor = async (p: Profile) => {
+    const api = backend();
+    if (!api) return;
+    const saved = await api.SaveProfile(p);
+    await api.SetActiveProfile(saved.id);
+    setDraft(null);
+    setScreen("server");
+  };
+
   // Редактор профиля перекрывает раздел целиком: так же, как отдельный
   // экран профиля в Android-клиенте.
-  const content = draft ? (
+  const content = wizard ? (
+    <ServerWizard
+      onCancel={() => setWizard(false)}
+      onDone={() => {
+        setWizard(false);
+        setScreen("home");
+      }}
+      onManual={async () => {
+        const blank = await backend()?.NewProfile("Новый сервер");
+        setWizard(false);
+        if (blank) setDraft(blank);
+      }}
+    />
+  ) : draft ? (
     <ProfileEditor
       profile={draft}
       onChange={setDraft}
+      onOpenServer={() => openServerFor(draft)}
       onCancel={() => setDraft(null)}
       onSave={async () => {
         await backend()?.SaveProfile(draft);
@@ -103,8 +139,23 @@ export default function App() {
     />
   ) : (
     {
-      home: <Home core={core} snap={snap} phase={phase} onEditProfile={setDraft} />,
-      server: <ServerTab active={active} />,
+      home: (
+        <Home
+          core={core}
+          snap={snap}
+          phase={phase}
+          onEditProfile={setDraft}
+          onAddServer={addServer}
+        />
+      ),
+      server: (
+        <ServerTab
+          active={active}
+          hasProfiles={snap.list.length > 0}
+          onAdd={addServer}
+          onHome={() => setScreen("home")}
+        />
+      ),
       logs: (
         <div className="h-full px-8 py-6">
           <LogView />
@@ -124,7 +175,15 @@ export default function App() {
 
   return (
     <div className="flex h-screen bg-zinc-100 text-zinc-900 dark:bg-zinc-950 dark:text-zinc-100">
-      <Rail screen={screen} onScreen={(s) => { setDraft(null); setScreen(s); }} phase={phase} />
+      <Rail
+        screen={screen}
+        onScreen={(s) => {
+          setDraft(null);
+          setWizard(false);
+          setScreen(s);
+        }}
+        phase={phase}
+      />
 
       <main className="flex min-w-0 flex-1 flex-col overflow-hidden">
         <TopProgress active={busyLabel !== ""} label={busyLabel} />
@@ -132,24 +191,48 @@ export default function App() {
         {/* Отдельный контейнер: без него баннер съедает высоту экранов,
             которые тянутся на 100% и считают её от всего main. */}
         <div className="flex min-h-0 flex-1 flex-col">
-          <ErrorBoundary key={draft ? "editor" : screen}>{content}</ErrorBoundary>
+          <ErrorBoundary key={wizard ? "wizard" : draft ? "editor" : screen}>{content}</ErrorBoundary>
         </div>
       </main>
     </div>
   );
 }
 
-/** Вкладка сервера работает с активным профилем. */
-function ServerTab({ active }: { active: Profile | null }) {
+/**
+ * Вкладка сервера работает с активным профилем.
+ *
+ * Пустой экран раньше был тупиком: добавить сервер отсюда было нельзя, и
+ * человеку приходилось догадываться, что сначала нужно завести профиль на
+ * главной. Теперь кнопка здесь же - она заводит профиль и делает его
+ * активным, а форма доступа по SSH открывается сама.
+ */
+function ServerTab({
+  active,
+  hasProfiles,
+  onAdd,
+  onHome,
+}: {
+  active: Profile | null;
+  hasProfiles: boolean;
+  onAdd: () => void;
+  onHome: () => void;
+}) {
   if (!active) {
     return (
       <div className="px-8 py-6">
         <Card>
-          <div className="h-48">
+          <div className="flex h-48 flex-col items-center justify-center gap-3">
             <EmptyState
-              title="Профиль не выбран"
-              hint="Управление сервером работает с активным профилем: выберите его на главном экране."
+              title={hasProfiles ? "Профиль не выбран" : "Сервер ещё не добавлен"}
+              hint={
+                hasProfiles
+                  ? "Управление сервером работает с активным профилем — выберите его на главном экране."
+                  : "Мастер спросит доступ по SSH, поставит серверную часть и заполнит профиль."
+              }
             />
+            <Button variant="primary" onClick={hasProfiles ? onHome : onAdd}>
+              {hasProfiles ? "Выбрать профиль" : "Добавить сервер"}
+            </Button>
           </div>
         </Card>
       </div>

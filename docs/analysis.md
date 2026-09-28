@@ -118,8 +118,8 @@ Android гоняет по SSH свой bundle `server-control/src/*.sh` (GPL-3.0
 один JSON-объект на запуск, `{"proto":2,"result":"ok"|"err","code","msg","stage","data","logs"}`.
 
 **Тот же протокол уже встроен в `scripts/install.sh` самого ядра** (`install.sh:2580+`):
-подкоманды `probe, install, wg-setup, start, stop, logs, share-info, share-list,
-peer-add, peer-conf, peer-remove, client-add, client-remove, uninstall`; аргументы вида
+подкоманды `probe, apply, stop, restart, logs, client-list, client-add,
+client-conf, client-remove, uninstall` (протокол 3, ядро 4.0); аргументы вида
 `--listen= --connect= --mode= --obf-profile= --obf-key= --obf-timing= --tail= --port=
 --endpoint= --name-b64= --pubkey= --client-id= --sha256= --dns= --target= --with-wg-pkg --dry-run`.
 

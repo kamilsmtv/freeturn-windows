@@ -24,7 +24,11 @@ func BuildArgs(p profile.Profile) []string {
 
 	add("-peer", strings.TrimSpace(c.ServerAddress))
 
-	if link := strings.TrimSpace(c.VKLink); link != "" {
+	// Флаги реле ядро в режиме direct игнорирует (docs/providers.md).
+	// Не пишем их вовсе: так в журнале видно, чем сеанс отличается.
+	relay := c.Provider != profile.ProviderDirect
+
+	if link := strings.TrimSpace(c.VKLink); link != "" && relay {
 		add("-links", link)
 	}
 	if c.Provider != "" && c.Provider != profile.ProviderVK {
@@ -33,7 +37,7 @@ func BuildArgs(p profile.Profile) []string {
 	if listen := strings.TrimSpace(c.LocalPort); listen != "" && listen != profile.DefaultListen {
 		add("-listen", listen)
 	}
-	if c.MagicSwitch {
+	if c.MagicSwitch && relay {
 		if turn := strings.TrimSpace(c.MagicTurn); turn != "" {
 			add("-turn", turn)
 		}
@@ -41,18 +45,23 @@ func BuildArgs(p profile.Profile) []string {
 			add("-port", port)
 		}
 	}
-	if c.Threads > 0 && c.Threads != profile.DefaultN {
+	// Дефолт -n зависит от провайдера: у direct он равен единице.
+	if c.Threads > 0 && c.Threads != profile.DefaultThreads(c.Provider) {
 		add("-n", strconv.Itoa(c.Threads))
 	}
-	if c.StreamsPerCred > 0 && c.StreamsPerCred != profile.DefaultStreamsPerCred {
+	if c.StreamsPerCred > 0 && c.StreamsPerCred != profile.DefaultStreamsPerCred && relay {
 		add("-streams-per-cred", strconv.Itoa(c.StreamsPerCred))
 	}
 	// Дефолт транспорта - tcp, поэтому пишем только udp.
-	if c.UseUDP {
+	if c.UseUDP && relay {
 		add("-transport", profile.TransportUDP)
 	}
 	if o.TCPMode() {
 		add("-mode", profile.ModeTCP)
+		// -bond держится на поддержке сервера, поэтому включается руками.
+		if c.Bond {
+			args = append(args, "-bond")
+		}
 		args = append(args, kcpArgs(o.KCP)...)
 	}
 	if o.ObfEnabled() {
@@ -63,10 +72,10 @@ func BuildArgs(p profile.Profile) []string {
 	if o.ObfEnabled() && o.ObfTimingMs > 0 {
 		add("-obf-timing", fmt.Sprintf("%dms", o.ObfTimingMs))
 	}
-	if c.ManualCaptcha {
+	if c.ManualCaptcha && relay {
 		args = append(args, "-manual-captcha")
 	}
-	if c.Platform != "" && c.Platform != profile.PlatformDesktop {
+	if c.Platform != "" && c.Platform != profile.PlatformDesktop && relay {
 		add("-platform", c.Platform)
 	}
 	if c.DNSMode != "" && c.DNSMode != profile.DNSAuto {
@@ -85,6 +94,34 @@ func BuildArgs(p profile.Profile) []string {
 		args = append(args, "-debug")
 	}
 	return args
+}
+
+// validateSocks проверяет параметры раздачи в локальную сеть.
+func validateSocks(c profile.Client) error {
+	// В режиме прокси раздавать нечего, но и запрещать подключение из-за
+	// забытой галки неправильно: приложение просто не поднимет раздачу и
+	// скажет об этом в журнале.
+	if !c.SocksHotspot || c.TunnelTransport != "wireguard" {
+		return nil
+	}
+
+	// Пустое поле - не ошибка, а профиль, созданный до появления раздачи:
+	// приложение подставит дефолт, как и при запуске сервера.
+	listen := strings.TrimSpace(c.SocksListen)
+	if listen != "" && !ValidHostPort(listen) {
+		return errors.New("адрес раздачи должен быть вида ip:port, например 0.0.0.0:1080")
+	}
+	// Совпадение с портом ядра здесь не проверяем: ядро слушает UDP, а
+	// раздача TCP, и одинаковый номер им не мешает. Настоящую занятость
+	// покажет сам сокет при запуске, и скажет об этом точнее догадки.
+	if strings.TrimSpace(c.SocksUser) == "" {
+		return errors.New("для раздачи в локальную сеть нужны логин и пароль: " +
+			"открытый SOCKS5 в общей сети подберут посторонние")
+	}
+	if c.SocksPassword == "" {
+		return errors.New("для раздачи в локальную сеть нужен пароль")
+	}
+	return nil
 }
 
 // kcpArgs пишет только те -kcp-*, что отличаются от дефолта ядра.
@@ -142,8 +179,12 @@ func Validate(p profile.Profile) error {
 	if listen := strings.TrimSpace(c.LocalPort); listen != "" && !ValidHostPort(listen) {
 		return errors.New("локальный адрес должен быть вида ip:port, например 127.0.0.1:9000")
 	}
-	if c.Provider == profile.ProviderVK && strings.TrimSpace(c.VKLink) == "" {
+	// Ссылка нужна только реле: direct идёт прямо на сервер.
+	if c.Provider != profile.ProviderDirect && strings.TrimSpace(c.VKLink) == "" {
 		return errors.New("не указана ссылка на звонок VK Calls")
+	}
+	if c.Bond && !o.TCPMode() {
+		return errors.New("объединение сессий (bond) работает только в режиме проброса tcp")
 	}
 	if o.ObfEnabled() && !profile.ValidObfKey(o.ObfKey) {
 		return errors.New("ключ обфускации должен быть 64 hex-символа; профиль и ключ обязаны совпадать с сервером")
@@ -156,6 +197,9 @@ func Validate(p profile.Profile) error {
 	}
 	if o.TCPMode() && !o.KCP.Valid() {
 		return errors.New("параметры KCP вне допустимых диапазонов (MTU 300..1350, окна > 0)")
+	}
+	if err := validateSocks(c); err != nil {
+		return err
 	}
 	return nil
 }
