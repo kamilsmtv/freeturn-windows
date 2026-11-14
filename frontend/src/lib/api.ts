@@ -195,6 +195,7 @@ type Backend = {
   ImportLink(raw: string): Promise<Profile>;
   ExportLink(id: string, includeVKLink: boolean, clientId: string): Promise<string>;
   ExportLinkToFile(id: string, includeVKLink: boolean, clientId: string): Promise<string>;
+  SaveLinkToFile(name: string, url: string): Promise<string>;
   FetchSubscription(url: string): Promise<SubPreview>;
   ApplySubscription(url: string): Promise<SubPreview>;
   RemoveSubscription(url: string): Promise<void>;

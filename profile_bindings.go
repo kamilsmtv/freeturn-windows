@@ -98,7 +98,22 @@ func (a *App) ExportLinkToFile(id string, includeVKLink bool, clientID string) (
 		return "", err
 	}
 	p, _ := a.profiles.Get(id)
-	path, err := a.saveFileDialog("Сохранить ссылку", safeFileName(p.Name)+".txt",
+	return a.writeLinkFile(p.Name, url)
+}
+
+// SaveLinkToFile сохраняет готовую ссылку - ту, что выдал сервер для
+// гостя. Собрать её заново из профиля нельзя: client-id и конфигурацию
+// гостя знает только сервер.
+func (a *App) SaveLinkToFile(name, url string) (string, error) {
+	url = strings.TrimSpace(url)
+	if _, err := link.Parse(url); err != nil {
+		return "", err
+	}
+	return a.writeLinkFile(name, url)
+}
+
+func (a *App) writeLinkFile(name, url string) (string, error) {
+	path, err := a.saveFileDialog("Сохранить ссылку", safeFileName(name)+".txt",
 		[]wailsruntime.FileFilter{{DisplayName: "Текстовый файл (*.txt)", Pattern: "*.txt"}})
 	if err != nil || path == "" {
 		return "", err

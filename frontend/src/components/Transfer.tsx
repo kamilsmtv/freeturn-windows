@@ -75,8 +75,18 @@ export function ShareDialog({ profile, onClose }: { profile: Profile; onClose: (
   const [serverError, setServerError] = useState("");
   const api = backend();
 
+  // Показывать ли ссылку, в которой только настройки, когда доступ можно
+  // завести на сервере: по ней гость не подключится, и это решение
+  // принимают осознанно, а не сканируя первый попавшийся QR.
+  const [forceSettingsOnly, setForceSettingsOnly] = useState(false);
+
   const canAsk = profile.ssh.ip.trim() !== "";
-  const shown = serverLink || url;
+  const manualId = clientId.trim() !== "";
+  // Без Client ID в ссылке Android подставит id своего устройства, а его
+  // нет в списке допущенных - сервер оборвёт каждый поток на рукопожатии.
+  const settingsOnly = !serverLink && !manualId;
+  const hidden = canAsk && settingsOnly && !forceSettingsOnly;
+  const shown = hidden ? "" : serverLink || url;
 
   // Ссылку пересобираем на каждое изменение переключателей: иначе на экране
   // (и в QR-коде) остаётся прежняя, и получатель сканирует не то, что видит
@@ -188,11 +198,16 @@ export function ShareDialog({ profile, onClose }: { profile: Profile; onClose: (
         <div className="flex items-center gap-2">
           <Button
             busy={saving}
+            disabled={hidden}
             onClick={async () => {
               setError("");
               setSaving(true);
               try {
-                const path = await api?.ExportLinkToFile(profile.id, includeVK, clientId);
+                // В файл уходит то же, что на экране: гостевая ссылка от
+                // сервера, а не заново собранная из профиля.
+                const path = serverLink
+                  ? await api?.SaveLinkToFile(guest.trim() || profile.name, serverLink)
+                  : await api?.ExportLinkToFile(profile.id, includeVK, clientId);
                 if (path) setSaved(path);
               } catch (e) {
                 setError(String(e));
@@ -204,6 +219,37 @@ export function ShareDialog({ profile, onClose }: { profile: Profile; onClose: (
             Сохранить в файл
           </Button>
         </div>
+
+        {hidden && (
+          <div className="flex flex-col gap-1.5 rounded-xl border border-dashed border-zinc-300 p-4 text-center dark:border-zinc-700">
+            <span className="text-[13px] text-zinc-700 dark:text-zinc-300">
+              QR-код появится, когда сервер заведёт доступ — кнопка «Создать» выше
+            </span>
+            <span className="text-xs text-zinc-500">
+              Ссылка без Client ID несёт только настройки: телефон подставит свой id, сервер его не знает
+              и не пустит.
+            </span>
+            <button
+              onClick={() => setForceSettingsOnly(true)}
+              className="mx-auto text-xs text-zinc-500 underline transition hover:text-zinc-700 dark:hover:text-zinc-300"
+            >
+              Всё равно показать ссылку только с настройками
+            </button>
+          </div>
+        )}
+
+        {shown && settingsOnly && canAsk && (
+          <p className="rounded-xl bg-amber-100 px-3 py-2 text-xs text-amber-900 dark:bg-amber-950 dark:text-amber-200">
+            <b>Только настройки — подключиться по этой ссылке не выйдет.</b> Клиент подставит id своего
+            устройства, а сервер пускает только Client ID из списка допущенных.
+          </p>
+        )}
+        {shown && manualId && !serverLink && (
+          <p className="rounded-xl bg-amber-100 px-3 py-2 text-xs text-amber-900 dark:bg-amber-950 dark:text-amber-200">
+            Client ID <span className="font-mono">{clientId.trim()}</span> нужно вручную внести в список
+            допущенных на сервере, иначе получатель не подключится.
+          </p>
+        )}
 
         {shown && (
           <>
