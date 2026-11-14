@@ -207,6 +207,7 @@ type Backend = {
   PrepareWGConfig(profileId: string): Promise<string>;
   SaveWGConfig(profileId: string): Promise<string>;
   TrafficStats(): Promise<Traffic>;
+  Ping(): Promise<PingResult>;
   SetAutostart(enable: boolean): Promise<void>;
   AutostartEnabled(): Promise<boolean>;
   HideWindow(): Promise<void>;
@@ -325,6 +326,12 @@ export type VPSResult = {
 export type QRImage = {
   uri: string;
   modules: number;
+};
+
+export type PingResult = {
+  ok: boolean;
+  ms: number;
+  error: string;
 };
 
 export type Traffic = {

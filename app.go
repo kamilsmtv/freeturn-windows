@@ -8,6 +8,7 @@ import (
 
 	"github.com/kamilsmtv/freeturn-windows/internal/core"
 	"github.com/kamilsmtv/freeturn-windows/internal/paths"
+	"github.com/kamilsmtv/freeturn-windows/internal/ping"
 	"github.com/kamilsmtv/freeturn-windows/internal/profile"
 	"github.com/kamilsmtv/freeturn-windows/internal/routes"
 	"github.com/kamilsmtv/freeturn-windows/internal/settings"
@@ -35,6 +36,10 @@ type App struct {
 	socks   *socks.Server
 	routes  *routes.Pinner
 	traffic trafficSampler
+	ping    *ping.Meter
+	// pingGen - сеанс, в котором мерило последний раз мерило. Новый
+	// сеанс - новый туннель, и соединение прошлого уже мертво.
+	pingGen atomic.Int64
 
 	// raiseMu разводит подъём сети и её снятие. Подъём идёт в отдельной
 	// горутине и занимает секунды; без замка «Отключить», нажатое в
@@ -81,7 +86,7 @@ func NewApp(st *settings.Store) (*App, error) {
 		return nil, err
 	}
 
-	a := &App{settings: st, profiles: profiles, tunnel: tunnel.New(), socks: socks.New()}
+	a := &App{settings: st, profiles: profiles, tunnel: tunnel.New(), socks: socks.New(), ping: ping.New()}
 	a.routes = routes.NewPinner(
 		filepath.Join(dataDir, "pinned-routes.json"),
 		func(line string) { a.core.AppendLog("info", line) },

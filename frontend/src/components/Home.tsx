@@ -11,7 +11,7 @@ import {
 } from "../lib/api";
 import { guard } from "../lib/effect";
 import { isVPN, runningProfile, type Phase } from "../lib/phase";
-import { bytes, uptime } from "../lib/format";
+import { StatsCard, StatsStrip, usePing } from "./StatsCard";
 import { ImportDialog, ShareDialog } from "./Transfer";
 
 /** Порог, с которого список перестаёт читаться взглядом и нужен поиск. */
@@ -96,6 +96,10 @@ export function Home({
   // Активный профиль можно переключить, не отключаясь: подпись под кнопкой
   // должна называть тот, с которым ядро работает сейчас.
   const shown = runningProfile(core, snap.list, active);
+  // Пинг имеет смысл только через туннель: в режиме прокси запрос
+  // приложения ушёл бы мимо него.
+  const vpnLive = phase.live && isVPN(shown);
+  const [ping, measurePing] = usePing(vpnLive);
 
   // Активный профиль всегда первым: до него не должно быть прокрутки.
   const visible = useMemo(() => {
@@ -142,15 +146,18 @@ export function Home({
           >
             <PowerIcon size={20} />
           </span>
-          <span className="flex min-w-0 flex-col">
+          <span className="flex min-w-0 flex-1 flex-col">
             <span className="text-[15px] font-semibold">{statusText}</span>
             <span className="truncate text-xs text-zinc-500 dark:text-zinc-400">
               {shown ? shown.name : "Профиль не выбран"}
             </span>
           </span>
+          {phase.live && (
+            <StatsStrip vpn={vpnLive} ping={ping} traffic={traffic} startedAt={core?.startedAt} />
+          )}
         </button>
       ) : (
-        <div className="flex flex-col items-center justify-center gap-5 px-10 pb-8 pt-10">
+        <div className="flex flex-col items-center justify-center gap-5 px-10 pb-7 pt-8">
           <button
             onClick={toggleConnection}
             disabled={!active || switching}
@@ -203,25 +210,13 @@ export function Home({
           </div>
 
           {phase.live && (
-            <div className="flex items-center rounded-full border border-zinc-200 bg-white px-1.5 py-2 dark:border-zinc-800 dark:bg-zinc-900">
-              {core?.startedAt && (
-                <>
-                  <Stat value={uptime(core.startedAt)} tone="clock" />
-                  <span className="h-[18px] w-px bg-zinc-200 dark:bg-zinc-800" />
-                </>
-              )}
-              {traffic?.available ? (
-                <>
-                  <Stat value={bytes(traffic.rxBytes)} tone="emerald" />
-                  <span className="h-[18px] w-px bg-zinc-200 dark:bg-zinc-800" />
-                  <Stat value={bytes(traffic.txBytes)} tone="sky" />
-                </>
-              ) : (
-                <span className="px-4 text-[13px] text-zinc-500 dark:text-zinc-400">
-                  {traffic?.reason || "Счётчики недоступны"}
-                </span>
-              )}
-            </div>
+            <StatsCard
+              vpn={vpnLive}
+              ping={ping}
+              onPing={measurePing}
+              traffic={traffic}
+              startedAt={core?.startedAt}
+            />
           )}
 
           {phase.live && socks?.enabled && socks.up && <SocksChip socks={socks} />}
@@ -489,38 +484,6 @@ function RowMenu({
         </>
       )}
     </div>
-  );
-}
-
-function Stat({ value, tone }: { value: string; tone: "clock" | "emerald" | "sky" }) {
-  const color =
-    tone === "clock" ? "text-zinc-400" : tone === "emerald" ? "text-emerald-500" : "text-sky-400";
-  return (
-    <span className="flex items-center gap-2 px-4">
-      <svg
-        width="16"
-        height="16"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.8"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        className={color}
-      >
-        {tone === "clock" ? (
-          <>
-            <circle cx="12" cy="12" r="9" />
-            <path d="M12 7v5l3 2" />
-          </>
-        ) : tone === "emerald" ? (
-          <path d="M12 19V5M6 11l6-6 6 6" />
-        ) : (
-          <path d="M12 5v14M6 13l6 6 6-6" />
-        )}
-      </svg>
-      <span className="text-[13px] text-zinc-800 dark:text-zinc-200">{value}</span>
-    </span>
   );
 }
 
