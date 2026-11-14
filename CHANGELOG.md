@@ -3,7 +3,7 @@
 Формат основан на [Keep a Changelog](https://keepachangelog.com/ru/1.1.0/),
 версии — по [семантическому версионированию](https://semver.org/lang/ru/).
 
-## [Не выпущено]
+## [0.2.1] — 2026-11-14
 
 ### Добавлено
 
@@ -195,6 +195,7 @@
 
 Подробности — в [руководстве](docs/guide.md).
 
-[Не выпущено]: https://github.com/kamilsmtv/freeturn-windows/compare/v0.2.0...HEAD
+[Не выпущено]: https://github.com/kamilsmtv/freeturn-windows/compare/v0.2.1...HEAD
+[0.2.1]: https://github.com/kamilsmtv/freeturn-windows/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/kamilsmtv/freeturn-windows/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/kamilsmtv/freeturn-windows/releases/tag/v0.1.0
