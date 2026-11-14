@@ -113,9 +113,18 @@
         <span style="font-size: 12px; font-weight: 600; color: #a1a1aa; letter-spacing: 0.04em; text-transform: uppercase">Раздельное туннелирование</span>
         <div style="display: flex; align-items: center; justify-content: space-between">
           <span style="font-size: 13px; color: #d4d4d8">Режим</span>
-          <span style="font-size: 13px">весь трафик</span>
+          <span style="font-size: 13px">всё, кроме подсетей</span>
         </div>
-        <span style="font-size: 12px; color: #71717a">На Windows делится по подсетям</span>
+        <!-- Галочка общих правил: включённая отдаёт режим и подсети общему набору -->
+        <div style="display: flex; flex-direction: column; gap: 4px">
+          <div style="display: flex; align-items: center; gap: 10px">
+            <span style="width: 18px; height: 18px; border-radius: 5px; background: #10b981; border: 1px solid #10b981; display: flex; align-items: center; justify-content: center; flex-shrink: 0; box-sizing: border-box">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#052e24" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.5 9.5 18 20 6.5"></path></svg>
+            </span>
+            <span style="font-size: 13px; color: #d4d4d8">Общие для всех профилей</span>
+          </div>
+          <span style="font-size: 12px; color: #71717a; padding-left: 28px" title="Правки затронут их все">Используют 3 из 4 профилей</span>
+        </div>
       </div>
 
       <div style="display: flex; flex-direction: column; gap: 10px; padding: 18px 20px; border-radius: 16px; background: #131316; border: 1px solid #27272a">
