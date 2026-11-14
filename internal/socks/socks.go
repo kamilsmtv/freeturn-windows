@@ -5,8 +5,8 @@
 // Поэтому серверу не нужно ничего знать про WireGuard: он принимает
 // соединение снаружи и делает обычный Dial, который уходит в туннель сам.
 //
-// Поддерживается только CONNECT. UDP ASSOCIATE не реализован: клиенты в
-// ответ на отказ уходят на TCP, и для браузера этого достаточно.
+// Поддерживаются CONNECT и UDP ASSOCIATE (см. udp.go). UDP слушает тот же
+// порт, что и TCP; если он занят, раздача работает только по TCP.
 //
 // Единственный запрет - подключения к самой этой машине (см. dialer).
 // Остальную локальную сеть не ограничиваем: подключившийся сосед и так
@@ -84,6 +84,8 @@ type Options struct {
 	// означает открытый сервер - решение принимает вызывающий.
 	User     string
 	Password string
+	// UDP включает команду UDP ASSOCIATE.
+	UDP bool
 	// Log получает сообщения для журнала приложения.
 	Log func(level, msg string)
 	// Dial переопределяет способ подключения к узлу назначения; нужен тестам.
@@ -99,6 +101,7 @@ type Options struct {
 // чужого Wait - это гонка.
 type session struct {
 	ln   net.Listener
+	udp  *relay // nil - UDP выключен или порт занят
 	stop chan struct{}
 	wg   sync.WaitGroup
 	// active - сколько соединений обслуживается прямо сейчас.
@@ -135,6 +138,20 @@ func (s *Server) Start(o Options) error {
 	}
 
 	live := &session{ln: ln, stop: make(chan struct{})}
+	if o.UDP {
+		r, err := listenRelay(ln.Addr(), o, live.stop)
+		if err != nil {
+			// Не повод отказываться от раздачи: по TCP она работает.
+			logf(o, "warn", "SOCKS5: UDP недоступен, раздача только по TCP: "+err.Error())
+		} else {
+			live.udp = r
+			live.wg.Add(1)
+			go func() {
+				defer live.wg.Done()
+				r.serve()
+			}()
+		}
+	}
 	s.live = live
 
 	live.wg.Add(1)
@@ -154,7 +171,16 @@ func (s *Server) Stop() {
 	}
 	close(live.stop)
 	_ = live.ln.Close()
+	if live.udp != nil {
+		live.udp.close()
+	}
 	live.wg.Wait()
+}
+
+// UDP сообщает, работает ли UDP ASSOCIATE.
+func (s *Server) UDP() bool {
+	live := s.session()
+	return live != nil && live.udp != nil
 }
 
 // Running сообщает, открыт ли сокет.
@@ -249,9 +275,13 @@ func (c *session) serve(conn net.Conn, o Options) {
 	}()
 
 	_ = conn.SetDeadline(time.Now().Add(handshakeTimeout))
-	target, err := handshake(conn, o)
+	cmd, target, err := handshake(conn, o, c.udp != nil)
 	if err != nil {
 		c.logHandshake(o, conn, err)
+		return
+	}
+	if cmd == cmdUDPAssociate {
+		c.associate(conn, o, target)
 		return
 	}
 
@@ -294,6 +324,41 @@ func (c *session) serve(conn net.Conn, o Options) {
 	_ = conn.SetDeadline(time.Time{})
 	_ = r.SetDeadline(time.Time{})
 	pipe(conn, r)
+}
+
+// associate обслуживает UDP ASSOCIATE: ассоциация живёт, пока открыто
+// управляющее TCP-соединение (RFC 1928, раздел 7).
+func (c *session) associate(conn net.Conn, o Options, declared string) {
+	peer, err := netip.ParseAddrPort(conn.RemoteAddr().String())
+	if err != nil {
+		_ = reply(conn, replyFailure, nil)
+		return
+	}
+	a, err := c.udp.open(peer.Addr(), declaredAddr(declared))
+	if err != nil {
+		_ = reply(conn, replyFailure, nil)
+		logf(o, "warn", "SOCKS5: не удалось открыть UDP: "+err.Error())
+		return
+	}
+	defer a.close()
+
+	// Отдаём тот адрес, на который сосед и так пришёл по TCP: адрес
+	// сокета 0.0.0.0 ему ничего не скажет.
+	local, _ := conn.LocalAddr().(*net.TCPAddr)
+	bound := &net.UDPAddr{}
+	if ua, ok := c.udp.pc.LocalAddr().(*net.UDPAddr); ok {
+		bound.Port = ua.Port
+	}
+	if local != nil {
+		bound.IP = local.IP
+	}
+	if err := reply(conn, replyOK, bound); err != nil {
+		return
+	}
+
+	// Данных по управляющему соединению не ходит: ждём, пока его закроют.
+	_ = conn.SetDeadline(time.Time{})
+	_, _ = io.Copy(io.Discard, conn)
 }
 
 // dialer собирает исходящее подключение с одним запретом: до самой этой

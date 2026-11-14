@@ -19,16 +19,21 @@ const ruleName = "FreeTurn SOCKS5"
 // выглядит как неработающее приложение, а не как закрытый брандмауэр.
 // Профиль public исключён намеренно: в кафе и отелях сеть считается
 // публичной, и открывать там порт по умолчанию мы не станем.
+//
+// UDP открывается на том же порту: на нём слушает ретранслятор UDP
+// ASSOCIATE. Оба правила носят одно имя и удаляются одной командой.
 func OpenPort(port int) error {
 	ClosePort()
-	_, err := netsh("advfirewall", "firewall", "add", "rule",
-		"name="+ruleName,
-		"dir=in", "action=allow", "protocol=TCP",
-		"localport="+strconv.Itoa(port),
-		"profile=private,domain",
-	)
-	if err != nil {
-		return fmt.Errorf("не удалось открыть порт %d в брандмауэре: %w", port, err)
+	for _, proto := range []string{"TCP", "UDP"} {
+		_, err := netsh("advfirewall", "firewall", "add", "rule",
+			"name="+ruleName,
+			"dir=in", "action=allow", "protocol="+proto,
+			"localport="+strconv.Itoa(port),
+			"profile=private,domain",
+		)
+		if err != nil {
+			return fmt.Errorf("не удалось открыть порт %d/%s в брандмауэре: %w", port, proto, err)
+		}
 	}
 	return nil
 }

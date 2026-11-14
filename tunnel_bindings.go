@@ -91,7 +91,10 @@ func (a *App) startSocks(gen int64, p profile.Profile) error {
 		Listen:   listen,
 		User:     strings.TrimSpace(p.Client.SocksUser),
 		Password: p.Client.SocksPassword,
-		Log:      a.core.AppendLog,
+		// UDP нужен соседям для QUIC, звонков и игр. Отдельного
+		// переключателя нет: раздача и так только по паролю.
+		UDP: true,
+		Log: a.core.AppendLog,
 	})
 	if err != nil {
 		return err
@@ -112,8 +115,12 @@ func (a *App) startSocks(gen int64, p profile.Profile) error {
 		}
 	}
 
+	mode := "только TCP"
+	if a.socks.UDP() {
+		mode = "TCP и UDP"
+	}
 	a.core.AppendLog("info", "Раздача в локальную сеть включена: SOCKS5 на "+a.socks.Addr()+
-		", вход по логину "+strings.TrimSpace(p.Client.SocksUser))
+		" ("+mode+"), вход по логину "+strings.TrimSpace(p.Client.SocksUser))
 	return nil
 }
 

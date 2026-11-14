@@ -10,13 +10,13 @@ import (
 	"strconv"
 )
 
-// handshake проводит приветствие, авторизацию и разбор запроса CONNECT.
-// Возвращает адрес назначения в виде host:port.
-func handshake(conn net.Conn, o Options) (string, error) {
+// handshake проводит приветствие, авторизацию и разбор запроса.
+// Возвращает команду и адрес из запроса в виде host:port.
+func handshake(conn net.Conn, o Options, udp bool) (byte, string, error) {
 	if err := negotiate(conn, o); err != nil {
-		return "", err
+		return 0, "", err
 	}
-	return request(conn)
+	return request(conn, udp)
 }
 
 // negotiate выбирает способ авторизации и проводит её.
@@ -90,19 +90,21 @@ func authenticate(conn net.Conn, o Options) error {
 	return nil
 }
 
-// request разбирает запрос и возвращает адрес назначения.
-func request(conn net.Conn) (string, error) {
+// request разбирает запрос и возвращает команду и адрес. udp разрешает
+// UDP ASSOCIATE; без него, как и на BIND, клиент получает отказ и уходит
+// на TCP.
+func request(conn net.Conn, udp bool) (byte, string, error) {
 	head := make([]byte, 4)
 	if _, err := io.ReadFull(conn, head); err != nil {
-		return "", err
+		return 0, "", err
 	}
 	if head[0] != version5 {
-		return "", fmt.Errorf("версия протокола %d не поддерживается", head[0])
+		return 0, "", fmt.Errorf("версия протокола %d не поддерживается", head[0])
 	}
-	if head[1] != cmdConnect {
-		// BIND и UDP ASSOCIATE не поддержаны; клиенты уходят на TCP.
+	cmd := head[1]
+	if cmd != cmdConnect && (cmd != cmdUDPAssociate || !udp) {
 		_ = reply(conn, replyBadCommand, nil)
-		return "", fmt.Errorf("команда %d не поддерживается, доступен только CONNECT", head[1])
+		return 0, "", fmt.Errorf("команда %d не поддерживается", cmd)
 	}
 
 	var host string
@@ -110,49 +112,58 @@ func request(conn net.Conn) (string, error) {
 	case addrIPv4:
 		buf := make([]byte, net.IPv4len)
 		if _, err := io.ReadFull(conn, buf); err != nil {
-			return "", err
+			return 0, "", err
 		}
 		host = net.IP(buf).String()
 	case addrIPv6:
 		buf := make([]byte, net.IPv6len)
 		if _, err := io.ReadFull(conn, buf); err != nil {
-			return "", err
+			return 0, "", err
 		}
 		host = net.IP(buf).String()
 	case addrDomain:
 		name, err := readField(conn)
 		if err != nil {
-			return "", err
+			return 0, "", err
 		}
 		if name == "" {
 			_ = reply(conn, replyBadAddress, nil)
-			return "", errors.New("пустое имя узла в запросе")
+			return 0, "", errors.New("пустое имя узла в запросе")
 		}
 		host = name
 	default:
 		_ = reply(conn, replyBadAddress, nil)
-		return "", fmt.Errorf("тип адреса %d не поддерживается", head[3])
+		return 0, "", fmt.Errorf("тип адреса %d не поддерживается", head[3])
 	}
 
 	portBuf := make([]byte, 2)
 	if _, err := io.ReadFull(conn, portBuf); err != nil {
-		return "", err
+		return 0, "", err
 	}
 	port := binary.BigEndian.Uint16(portBuf)
-	if port == 0 {
+	// В UDP ASSOCIATE клиент объявляет свой адрес, и нули там обычны.
+	if port == 0 && cmd == cmdConnect {
 		_ = reply(conn, replyBadAddress, nil)
-		return "", errors.New("нулевой порт в запросе")
+		return 0, "", errors.New("нулевой порт в запросе")
 	}
-	return net.JoinHostPort(host, strconv.Itoa(int(port))), nil
+	return cmd, net.JoinHostPort(host, strconv.Itoa(int(port))), nil
 }
 
-// reply отправляет ответ на запрос CONNECT. Адрес привязки клиенты, как
+// reply отправляет ответ на запрос. Адрес привязки клиенты, как
 // правило, игнорируют, но поле обязано быть корректным.
 func reply(conn net.Conn, code byte, bound net.Addr) error {
 	out := []byte{version5, code, 0x00}
 
-	addr, ok := bound.(*net.TCPAddr)
-	if !ok || addr == nil || addr.IP == nil {
+	var addr *net.TCPAddr
+	switch b := bound.(type) {
+	case *net.TCPAddr:
+		addr = b
+	case *net.UDPAddr:
+		if b != nil {
+			addr = &net.TCPAddr{IP: b.IP, Port: b.Port}
+		}
+	}
+	if addr == nil || addr.IP == nil {
 		out = append(out, addrIPv4, 0, 0, 0, 0, 0, 0)
 		_, err := conn.Write(out)
 		return err
