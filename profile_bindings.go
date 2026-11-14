@@ -201,6 +201,7 @@ func (a *App) ExportBackup(password string) (string, error) {
 		ActiveID:    snap.ActiveID,
 		OwnClientID: a.ownClientID(),
 		Toggles:     map[string]bool{"privacyMode": s.Theme == "dark"},
+		SplitShared: s.SplitShared,
 	}, password)
 	if err != nil {
 		return "", err
@@ -237,6 +238,9 @@ func (a *App) ImportBackup(password string) (int, error) {
 
 	s := a.settings.Get()
 	s.OwnClientID = d.OwnClientID
+	// Бэкап заменяет профили целиком - и общие правила вместе с ними:
+	// профили из бэкапа ссылаются именно на его набор.
+	s.SplitShared = d.SplitShared
 	_ = a.settings.Save(s)
 
 	a.emitProfiles()

@@ -135,6 +135,7 @@ export type Profile = {
     wireGuardTunnelName: string;
     splitTunnelMode: string;
     splitTunnelSubnets: string;
+    splitTunnelShared: boolean;
     socksHotspot: boolean;
     socksListen: string;
     socksUser: string;
@@ -208,6 +209,8 @@ type Backend = {
   SaveWGConfig(profileId: string): Promise<string>;
   TrafficStats(): Promise<Traffic>;
   Ping(): Promise<PingResult>;
+  GetSplitShared(): Promise<SplitShared>;
+  SetSplitShared(mode: string, subnets: string): Promise<void>;
   SetAutostart(enable: boolean): Promise<void>;
   AutostartEnabled(): Promise<boolean>;
   HideWindow(): Promise<void>;
@@ -326,6 +329,14 @@ export type VPSResult = {
 export type QRImage = {
   uri: string;
   modules: number;
+};
+
+export type SplitShared = {
+  exists: boolean;
+  mode: string;
+  subnets: string;
+  users: number;
+  total: number;
 };
 
 export type PingResult = {

@@ -70,10 +70,11 @@ func (a *App) PrepareWGConfig(profileID string) (string, error) {
 	if strings.TrimSpace(p.Client.WireGuardConfig) == "" {
 		return "", errors.New("в профиле нет конфигурации WireGuard - вставьте её в разделе «Дополнительно»")
 	}
+	mode, subnets := a.effectiveSplit(p)
 	return wg.Prepare(p.Client.WireGuardConfig, wg.Options{
 		Listen:     p.Client.LocalPort,
-		SplitMode:  p.Client.SplitTunnelMode,
-		Subnets:    p.Client.SplitTunnelSubnets,
+		SplitMode:  mode,
+		Subnets:    subnets,
 		DNSServers: p.Client.CustomDNS,
 	})
 }

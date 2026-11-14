@@ -47,6 +47,16 @@ type Settings struct {
 	KeepLogLines       int    `json:"keepLogLines"`
 	SuppressAdminWarn  bool   `json:"suppressAdminWarn"`
 	CoreVersionChecked string `json:"coreVersionChecked"`
+	// SplitShared - общие правила раздельного туннелирования для профилей
+	// с включённым SplitTunnelShared. nil - набор ещё не заводили: его
+	// создаёт первый профиль, на котором включили общие правила.
+	SplitShared *SplitRules `json:"splitShared,omitempty"`
+}
+
+// SplitRules - режим раздельного туннелирования и подсети к нему.
+type SplitRules struct {
+	Mode    string `json:"mode"`
+	Subnets string `json:"subnets"`
 }
 
 // Default возвращает настройки по умолчанию: интервал проверки ядра 6 часов,
@@ -125,6 +135,11 @@ func (s *Store) Get() Settings {
 	cur := s.cur
 	if cur.Subscriptions == nil {
 		cur.Subscriptions = []string{}
+	}
+	// Указатель копируем, иначе правка снаружи прошла бы мимо Save и замка.
+	if cur.SplitShared != nil {
+		r := *cur.SplitShared
+		cur.SplitShared = &r
 	}
 	return cur
 }

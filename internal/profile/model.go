@@ -107,6 +107,11 @@ type Client struct {
 	// (на Windows аналога Android per-app нет, см. docs/analysis.md).
 	SplitTunnelMode    string `json:"splitTunnelMode"`
 	SplitTunnelSubnets string `json:"splitTunnelSubnets"`
+	// SplitTunnelShared - брать правила не из профиля, а из общего набора
+	// в настройках (settings.SplitShared), как «Общие для всех профилей»
+	// Android-клиента 5.1. Свои правила профиля при этом хранятся, но не
+	// действуют.
+	SplitTunnelShared bool `json:"splitTunnelShared"`
 
 	// SocksHotspot раздаёт поднятый туннель в локальную сеть через
 	// SOCKS5 (как «SOCKS5 Hotspot» Android-клиента). Работает только в

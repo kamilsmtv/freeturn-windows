@@ -126,6 +126,7 @@ func encodeClient(p profile.Profile) json.RawMessage {
 	obj["routes"] = c.Routes
 	obj["magicPort"] = c.MagicPort
 	obj["splitTunnelSubnets"] = c.SplitTunnelSubnets
+	obj["splitTunnelShared"] = c.SplitTunnelShared
 	obj["socksHotspot"] = c.SocksHotspot
 	obj["socksListen"] = c.SocksListen
 	obj["socksUser"] = c.SocksUser
@@ -211,6 +212,7 @@ func decodeClient(p *profile.Profile, raw json.RawMessage) {
 	get("wireGuardTunnelName", &c.WireGuardTunnelName)
 	get("splitTunnelMode", &c.SplitTunnelMode)
 	get("splitTunnelSubnets", &c.SplitTunnelSubnets)
+	get("splitTunnelShared", &c.SplitTunnelShared)
 	get("logsEnabled", &c.LogsEnabled)
 	get("clientId", &c.ClientID)
 	get("routes", &c.Routes)

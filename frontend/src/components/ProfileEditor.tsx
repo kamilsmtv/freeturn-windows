@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { backend, type Profile } from "../lib/api";
+import { useEffect, useState } from "react";
+import { backend, type Profile, type SplitShared } from "../lib/api";
 import { Button, Card, Toggle } from "./ui";
 import { CheckBox, Field, NumberInput, Picker, TextArea, TextInput } from "./Field";
 
@@ -30,6 +30,67 @@ export function ProfileEditor({
   const [wgError, setWgError] = useState("");
   const api = backend();
 
+  // Общие правила раздельного туннелирования живут вне профиля, но
+  // правятся здесь же: держим их черновик рядом с черновиком профиля и
+  // сохраняем вместе с ним - «Отмена» откатывает и то и другое.
+  const [shared, setShared] = useState<SplitShared | null>(null);
+  const [sharedDraft, setSharedDraft] = useState({ mode: "all", subnets: "" });
+  const [sharedError, setSharedError] = useState("");
+  const [wasShared] = useState(profile.client.splitTunnelShared);
+  useEffect(() => {
+    api?.GetSplitShared().then((s) => {
+      setShared(s);
+      if (s.exists) setSharedDraft({ mode: s.mode, subnets: s.subnets });
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const useShared = profile.client.splitTunnelShared;
+  const split = useShared
+    ? { mode: sharedDraft.mode, subnets: sharedDraft.subnets }
+    : { mode: profile.client.splitTunnelMode, subnets: profile.client.splitTunnelSubnets };
+  const setSplit = (patch: { mode?: string; subnets?: string }) => {
+    if (useShared) {
+      setSharedDraft((d) => ({ ...d, ...patch }));
+      return;
+    }
+    client({
+      ...(patch.mode !== undefined && { splitTunnelMode: patch.mode }),
+      ...(patch.subnets !== undefined && { splitTunnelSubnets: patch.subnets }),
+    });
+  };
+  // Как в Android: включение на профиле без набора заводит набор из его
+  // правил, выключение оставляет профилю копию общих - чтобы маршруты не
+  // поменялись от одного щелчка.
+  const toggleShared = (on: boolean) => {
+    if (on) {
+      if (!shared?.exists) {
+        setSharedDraft({ mode: profile.client.splitTunnelMode, subnets: profile.client.splitTunnelSubnets });
+      }
+      client({ splitTunnelShared: true });
+    } else {
+      client({ splitTunnelShared: false, splitTunnelMode: sharedDraft.mode, splitTunnelSubnets: sharedDraft.subnets });
+    }
+  };
+  const sharedUsers = (shared?.users ?? 0) - (wasShared ? 1 : 0) + (useShared ? 1 : 0);
+  const sharedTotal = Math.max(shared?.total ?? 0, sharedUsers);
+
+  // commit сохраняет общие правила раньше профиля: если подсети не
+  // разобрались, профиль не должен сохраниться ссылкой на битый набор.
+  const commit = (next: () => void) => async () => {
+    setSharedError("");
+    if (useShared) {
+      try {
+        await api?.SetSplitShared(sharedDraft.mode, sharedDraft.subnets);
+      } catch (e) {
+        setSharedError(String(e));
+        setAdvanced(true);
+        return;
+      }
+    }
+    next();
+  };
+
   const client = (patch: Partial<Profile["client"]>) =>
     onChange({ ...profile, client: { ...profile.client, ...patch } });
   const opts = (patch: Partial<Profile["opts"]>) =>
@@ -57,7 +118,7 @@ export function ProfileEditor({
           <p className="text-xs text-zinc-500 dark:text-zinc-400">Профиль подключения</p>
         </div>
         <Button onClick={onCancel}>Отмена</Button>
-        <Button variant="primary" onClick={onSave}>
+        <Button variant="primary" onClick={commit(onSave)}>
           Сохранить
         </Button>
       </header>
@@ -282,7 +343,7 @@ export function ProfileEditor({
                 <p className="text-sm text-red-600 dark:text-red-400">{wgError}</p>
                 {needsSSH(wgError) && (
                   <div>
-                    <Button variant="primary" onClick={onOpenServer}>
+                    <Button variant="primary" onClick={commit(onOpenServer)}>
                       Заполнить доступ по SSH
                     </Button>
                   </div>
@@ -499,11 +560,24 @@ export function ProfileEditor({
               </Field>
             </div>
 
+            <div className="flex flex-col gap-1 pt-3">
+              <CheckBox
+                checked={useShared}
+                onChange={toggleShared}
+                label="Общие для всех профилей"
+              />
+              <p className="pl-[28px] text-xs text-zinc-500 dark:text-zinc-400">
+                {useShared
+                  ? `Используют ${sharedUsers} из ${sharedTotal} профилей. Правки затронут их все`
+                  : "Один набор правил для всех профилей, где это включено"}
+              </p>
+            </div>
+
             <div className="grid gap-3 pt-3 md:grid-cols-2">
               <Field label="Раздельное туннелирование" hint="На Windows делится по подсетям, а не по приложениям">
                 <Picker
-                  value={profile.client.splitTunnelMode}
-                  onChange={(splitTunnelMode) => client({ splitTunnelMode })}
+                  value={split.mode}
+                  onChange={(mode) => setSplit({ mode })}
                   options={[
                     { value: "all", label: "Весь трафик в туннель" },
                     { value: "exclude", label: "Всё, кроме указанных подсетей" },
@@ -511,15 +585,13 @@ export function ProfileEditor({
                   ]}
                 />
               </Field>
-              {profile.client.splitTunnelMode !== "all" && (
+              {split.mode !== "all" && (
                 <Field label="Подсети" hint="Через запятую: 10.0.0.0/8, 192.168.0.0/16">
-                  <TextInput
-                    value={profile.client.splitTunnelSubnets}
-                    onChange={(splitTunnelSubnets) => client({ splitTunnelSubnets })}
-                  />
+                  <TextInput value={split.subnets} onChange={(subnets) => setSplit({ subnets })} />
                 </Field>
               )}
             </div>
+            {sharedError && <p className="pt-2 text-sm text-red-600 dark:text-red-400">{sharedError}</p>}
 
             <div className="flex flex-wrap items-center gap-2 pt-4">
               <Button
@@ -632,7 +704,7 @@ export function ProfileEditor({
                 <p className="text-sm text-red-600 dark:text-red-400">{wgError}</p>
                 {needsSSH(wgError) && (
                   <div>
-                    <Button variant="primary" onClick={onOpenServer}>
+                    <Button variant="primary" onClick={commit(onOpenServer)}>
                       Заполнить доступ по SSH
                     </Button>
                   </div>

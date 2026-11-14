@@ -191,7 +191,7 @@ func (a *App) startTunnel(p profile.Profile) error {
 		return fmt.Errorf("конфигурация WireGuard не разобрана: %w", err)
 	}
 
-	allowed, err := wg.AllowedIPs(p.Client.SplitTunnelMode, p.Client.SplitTunnelSubnets)
+	allowed, err := wg.AllowedIPs(a.effectiveSplit(p))
 	if err != nil {
 		return err
 	}

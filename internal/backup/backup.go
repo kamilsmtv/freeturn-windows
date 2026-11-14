@@ -18,6 +18,7 @@ import (
 	"golang.org/x/crypto/pbkdf2"
 
 	"github.com/kamilsmtv/freeturn-windows/internal/profile"
+	"github.com/kamilsmtv/freeturn-windows/internal/settings"
 )
 
 // Параметры конверта - контракт с Android-клиентом, менять нельзя.
@@ -51,6 +52,11 @@ type Data struct {
 	// Toggles - настройки интерфейса из бэкапа. Часть из них относится
 	// только к Android; мы их сохраняем ради round-trip, но не применяем.
 	Toggles map[string]bool
+	// SplitShared - общие правила раздельного туннелирования; nil - их нет.
+	// Режим общий с Android (all/include/exclude), а вместо его списка
+	// приложений у нас подсети - они лежат под своим ключом, и Android
+	// их не тронет.
+	SplitShared *settings.SplitRules
 }
 
 type envelope struct {
@@ -176,6 +182,10 @@ func encodePayload(d Data) ([]byte, error) {
 	if d.ActiveID != "" {
 		out["activeId"] = d.ActiveID
 	}
+	if d.SplitShared != nil {
+		out["splitSharedMode"] = d.SplitShared.Mode
+		out["splitSharedSubnets"] = d.SplitShared.Subnets
+	}
 	for key, def := range toggleDefaults {
 		if v, ok := d.Toggles[key]; ok {
 			out[key] = v
@@ -200,6 +210,12 @@ func decodePayload(payload []byte) (Data, error) {
 		return Data{}, ErrClientID
 	}
 	_ = json.Unmarshal(raw["activeId"], &d.ActiveID)
+
+	var sharedMode, sharedSubnets string
+	if json.Unmarshal(raw["splitSharedMode"], &sharedMode) == nil && sharedMode != "" {
+		_ = json.Unmarshal(raw["splitSharedSubnets"], &sharedSubnets)
+		d.SplitShared = &settings.SplitRules{Mode: sharedMode, Subnets: sharedSubnets}
+	}
 
 	for key := range toggleDefaults {
 		var v bool

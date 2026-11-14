@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/kamilsmtv/freeturn-windows/internal/profile"
+	"github.com/kamilsmtv/freeturn-windows/internal/settings"
 )
 
 // Пароль от testdata/android-v4.json - конверта, собранного независимой
@@ -186,5 +187,37 @@ func TestServerBackendRoundTrip(t *testing.T) {
 	}
 	if got[0].ProxyConnect != "127.0.0.1:443" {
 		t.Errorf("адрес чужого VPN потерян: %q", got[0].ProxyConnect)
+	}
+}
+
+// Общие правила раздельного туннелирования и флаг профиля переживают
+// бэкап; без набора ключей в бэкапе нет, и восстановление даёт nil.
+func TestSplitSharedRoundTrip(t *testing.T) {
+	p := profile.New("общий")
+	p.Client.SplitTunnelShared = true
+	d := Data{
+		Profiles:    []profile.Profile{p},
+		OwnClientID: profile.NewClientID(),
+		SplitShared: &settings.SplitRules{Mode: "exclude", Subnets: "10.0.0.0/8"},
+	}
+	blob, err := Export(d, "pass")
+	if err != nil {
+		t.Fatalf("Export: %v", err)
+	}
+	got, err := Import(blob, "pass")
+	if err != nil {
+		t.Fatalf("Import: %v", err)
+	}
+	if got.SplitShared == nil || *got.SplitShared != *d.SplitShared {
+		t.Errorf("общие правила = %+v, want %+v", got.SplitShared, d.SplitShared)
+	}
+	if len(got.Profiles) != 1 || !got.Profiles[0].Client.SplitTunnelShared {
+		t.Error("флаг общих правил у профиля потерялся")
+	}
+
+	d.SplitShared = nil
+	blob, _ = Export(d, "pass")
+	if got, _ := Import(blob, "pass"); got.SplitShared != nil {
+		t.Errorf("пустой набор восстановился как %+v", got.SplitShared)
 	}
 }
