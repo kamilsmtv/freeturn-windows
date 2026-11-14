@@ -88,7 +88,7 @@
   window.go = { main: { App: {
     Environment: ok({ admin: true, webView2: true, webView2Version: "126.0", windows: true }),
     Info: ok({ version: "0.1.0", dataDir: "%APPDATA%\\FreeTurn", coreDir: "%LOCALAPPDATA%\\FreeTurn\\core",
-               logDir: "%APPDATA%\\FreeTurn\\logs", coreRepo: "samosvalishe/free-turn-proxy", guiRepo: "kamilsmtv/freeturn-windows" }),
+               logDir: "%APPDATA%\\FreeTurn\\logs", coreRepo: "hackdiaz-dev/free-turn-proxy", guiRepo: "kamilsmtv/freeturn-windows" }),
     GetSettings: ok(settings), SaveSettings: ok(undefined), AutostartEnabled: ok(true),
     CoreStatus: ok({ state: "running", profileId: "nl01", pid: 4242, version: "v3.4.0", startedAt: started, error: "" }),
     CoreLog: ok(logLines), CoreClearLog: ok(undefined), CoreStop: ok(undefined),
@@ -116,10 +116,10 @@
     },
     Downloads: ok([
       { title: "Ядро free-turn-proxy", hint: "Без него приложение не подключится. Укажите кнопкой «Выбрать файл» в карточке ядра.",
-        url: "https://github.com/samosvalishe/free-turn-proxy/releases/latest/download/client-windows-amd64.exe",
+        url: "https://github.com/hackdiaz-dev/free-turn-proxy/releases/latest/download/client-windows-amd64.exe",
         dir: "C:\\Users\\User\\AppData\\Local\\FreeTurn\\core", optional: false },
       { title: "Контрольные суммы ядра", hint: "Не обязателен. Положите рядом со скачанным ядром - приложение сверит файл по сумме.",
-        url: "https://github.com/samosvalishe/free-turn-proxy/releases/latest/download/checksums.txt",
+        url: "https://github.com/hackdiaz-dev/free-turn-proxy/releases/latest/download/checksums.txt",
         dir: "C:\\Users\\User\\AppData\\Local\\FreeTurn\\core", optional: true },
       { title: "Компонент сетевого адаптера (wintun 0.14.1)", hint: "Нужен только в режиме VPN. Подойдёт и архив, и распакованная wintun.dll.",
         url: "https://www.wintun.net/builds/wintun-0.14.1.zip",

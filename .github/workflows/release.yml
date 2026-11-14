@@ -88,7 +88,7 @@ jobs:
             dist/FreeTurn.exe
             dist/checksums.txt
           body: |
-            Десктопный клиент ядра [free-turn-proxy](https://github.com/samosvalishe/free-turn-proxy) для Windows 10/11 x64.
+            Десктопный клиент ядра [free-turn-proxy](https://github.com/hackdiaz-dev/free-turn-proxy) для Windows 10/11 x64.
 
             Требуется WebView2 (в Windows 11 уже есть) и запуск от имени администратора.
             Ядро приложение скачивает само при первом запуске.

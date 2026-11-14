@@ -19,7 +19,7 @@
 ## Быстрый старт
 
 1. **Поднимите сервер.** Либо вручную по
-   [quickstart ядра](https://github.com/samosvalishe/free-turn-proxy/blob/master/docs/quickstart.md),
+   [quickstart ядра](https://github.com/hackdiaz-dev/free-turn-proxy/blob/master/docs/quickstart.md),
    либо прямо из приложения: вкладка **«Сервер»** → доступ по SSH → «Установить
    ядро» → «Запустить» → «Настроить WireGuard и забрать конфиг».
 2. **Создайте звонок VK Calls** (`https://vk.ru/call/join/...`) и **не завершайте

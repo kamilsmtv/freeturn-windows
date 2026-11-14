@@ -101,11 +101,11 @@ export function About({
             </Group>
 
             <Group title="Чужой труд внутри">
-              <InfoRow title="free-turn-proxy" hint="Ядро проекта, автор samosvalishe">
+              <InfoRow title="free-turn-proxy" hint="Ядро проекта, автор hackdiaz-dev">
                 <Button onClick={open(coreRepo)}>GitHub</Button>
               </InfoRow>
               <InfoRow title="turn-proxy-android" hint="Модель профилей, формат ссылок и бэкапа">
-                <Button onClick={open("https://github.com/samosvalishe/turn-proxy-android")}>GitHub</Button>
+                <Button onClick={open("https://github.com/hackdiaz-dev/turn-proxy-android")}>GitHub</Button>
               </InfoRow>
               <InfoRow title="amneziawg-go" hint="WireGuard/AmneziaWG для встроенного туннеля">
                 <Button onClick={open("https://github.com/amnezia-vpn/amneziawg-go")}>GitHub</Button>

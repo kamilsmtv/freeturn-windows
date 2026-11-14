@@ -3,6 +3,17 @@
 Формат основан на [Keep a Changelog](https://keepachangelog.com/ru/1.1.0/),
 версии — по [семантическому версионированию](https://semver.org/lang/ru/).
 
+## [Не выпущено]
+
+### Исправлено
+
+- **Ядро скачивается из нового репозитория.** Ядро free-turn-proxy переехало
+  в [hackdiaz-dev/free-turn-proxy](https://github.com/hackdiaz-dev/free-turn-proxy),
+  а старый адрес больше не отвечает. Из-за этого в 0.2.0 не работали проверка
+  обновлений ядра, его скачивание и установка сервера: `install.sh` тоже брался
+  по старой ссылке. Теперь всё берётся с нового адреса. Протокол сервера
+  в ядре 4.1 не изменился.
+
 ## [0.2.0] — 2026-09-28
 
 ### Добавлено
@@ -149,5 +160,6 @@
 
 Подробности — в [руководстве](docs/guide.md).
 
-[Не выпущено]: https://github.com/kamilsmtv/freeturn-windows/compare/v0.1.0...HEAD
+[Не выпущено]: https://github.com/kamilsmtv/freeturn-windows/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/kamilsmtv/freeturn-windows/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/kamilsmtv/freeturn-windows/releases/tag/v0.1.0

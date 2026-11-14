@@ -23,7 +23,7 @@ const instanceName = "FreeTurn.SingleInstance"
 
 // Репозитории для проверки обновлений (ядро и сам GUI).
 const (
-	CoreRepo = "samosvalishe/free-turn-proxy"
+	CoreRepo = "hackdiaz-dev/free-turn-proxy"
 	GUIRepo  = "kamilsmtv/freeturn-windows"
 )
 

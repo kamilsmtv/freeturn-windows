@@ -18,7 +18,7 @@ import (
 
 // ScriptURL - install.sh ядра. Скрипт не вкомпилирован: так он всегда
 // соответствует текущей версии ядра, а мы не тащим чужой код в свой бинарь.
-const ScriptURL = "https://github.com/samosvalishe/free-turn-proxy/releases/latest/download/install.sh"
+const ScriptURL = "https://github.com/hackdiaz-dev/free-turn-proxy/releases/latest/download/install.sh"
 
 // Client выполняет команды управления сервером.
 type Client struct {

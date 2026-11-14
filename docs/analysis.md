@@ -2,8 +2,8 @@
 
 Источники (клонированы в `reference/`, в .gitignore):
 
-- `samosvalishe/free-turn-proxy` — ядро. Лицензия: **Happy Bunny License (HBL)**.
-- `samosvalishe/turn-proxy-android` — Android-клиент. Лицензия: **GPL-3.0**.
+- `hackdiaz-dev/free-turn-proxy` — ядро. Лицензия: **Happy Bunny License (HBL)**.
+- `hackdiaz-dev/turn-proxy-android` — Android-клиент. Лицензия: **GPL-3.0**.
 
 Всё ниже — из исходников, не из догадок. Спорные места помечены **TODO**.
 
@@ -135,7 +135,7 @@ client-conf, client-remove, uninstall` (протокол 3, ядро 4.0); ар�
 - Формат `binary` без архива, шаблон `{{.Binary}}-{{.Os}}-{{.Arch}}` →
   **`client-windows-amd64.exe`**, `server-windows-amd64.exe`, `client-linux-amd64`, …
 - Чек-суммы: **`checksums.txt`** в ассетах релиза.
-- Стабильный URL: `https://github.com/samosvalishe/free-turn-proxy/releases/latest/download/client-windows-amd64.exe`.
+- Стабильный URL: `https://github.com/hackdiaz-dev/free-turn-proxy/releases/latest/download/client-windows-amd64.exe`.
 - Версия в бинарь идёт через `-X main.version={{.Version}}`; теги вида `vX.Y.Z`.
 
 ---

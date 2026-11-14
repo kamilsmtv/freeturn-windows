@@ -1,6 +1,6 @@
 <div align="center">
 
-[![Core](https://img.shields.io/badge/Core-free--turn--proxy-blue?logo=github&logoColor=white)](https://github.com/samosvalishe/free-turn-proxy)
+[![Core](https://img.shields.io/badge/Core-free--turn--proxy-blue?logo=github&logoColor=white)](https://github.com/hackdiaz-dev/free-turn-proxy)
 ![Windows](https://img.shields.io/badge/Windows-10%2F11%20x64-0078D4?logo=windows&logoColor=white)
 ![Go](https://img.shields.io/badge/Go-Wails%20v2-00ADD8?logo=go&logoColor=white)
 ![React](https://img.shields.io/badge/React-Tailwind-61DAFB?logo=react&logoColor=white)
@@ -10,7 +10,7 @@
 
 # FreeTurn для Windows
 
-Десктопный клиент ядра [free-turn-proxy](https://github.com/samosvalishe/free-turn-proxy):
+Десктопный клиент ядра [free-turn-proxy](https://github.com/hackdiaz-dev/free-turn-proxy):
 профили, ссылки `freeturn://`, установка на VPS по SSH и встроенный туннель —
 одним `.exe`, без командной строки.
 
@@ -68,8 +68,8 @@
 
 ## Благодарности
 
-- **[@samosvalishe](https://github.com/samosvalishe)** — ядро [free-turn-proxy](https://github.com/samosvalishe/free-turn-proxy)
-  и Android-клиент [turn-proxy-android](https://github.com/samosvalishe/turn-proxy-android),
+- **[@hackdiaz-dev](https://github.com/hackdiaz-dev)** — ядро [free-turn-proxy](https://github.com/hackdiaz-dev/free-turn-proxy)
+  и Android-клиент [turn-proxy-android](https://github.com/hackdiaz-dev/turn-proxy-android),
   откуда взяты модель профилей, формат ссылок и бэкапа
 - **[amneziawg-go](https://github.com/amnezia-vpn/amneziawg-go)** — реализация WireGuard/AmneziaWG для встроенного туннеля
 - **[Wintun](https://www.wintun.net/)** — драйвер виртуального адаптера от WireGuard LLC
