@@ -1,0 +1,225 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin: 0; font-family: system-ui, "Segoe UI", sans-serif; }
+  </style>
+</helmet>
+
+<div style="width: 1100px; height: 1040px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 20px; align-content: start; padding: 28px 32px; box-sizing: border-box; background: #0c0c0e; color: #fafafa; overflow: hidden">
+  <div style="display: grid; grid-template-columns: 300px 1fr; gap: 24px; align-items: center">
+      <div style="display: flex; flex-direction: column; gap: 4px"><span style="font-size: 13px; font-weight: 600; color: #e4e4e7">Пинг: средний</span><span style="font-size: 12px; color: #71717a; line-height: 1.45">до 150 мс зелёная точка, до 400 жёлтая</span></div>
+      <div style="padding: 16px; border-radius: 12px; background: #09090b; border: 1px solid #1f1f23"><div style="width: 680px; display: flex; align-items: stretch; padding: 16px 0; border-radius: 16px; background: #131316; border: 1px solid #27272a">
+          <div style="flex: 1 1 0; min-width: 0; white-space: nowrap; display: flex; flex-direction: column; gap: 8px; padding: 0 20px; border-right: 1px solid #27272a;">
+            <div style="display: flex; align-items: center; height: 16px"><span style="font-size: 11px; font-weight: 600; color: #71717a; letter-spacing: 0.06em; text-transform: uppercase; flex-grow: 1">Пинг</span><div title="Измерить заново" style="width: 22px; height: 22px; margin: -3px -4px -3px 0; border-radius: 6px; display: flex; align-items: center; justify-content: center"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#a1a1aa" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-3-6.7"></path><path d="M21 4v5h-5"></path></svg></div></div>
+            <div style="display: flex; align-items: center; gap: 10px">
+              <div style="display: flex; flex-direction: column; gap: 4px; flex-grow: 1; min-width: 0">
+                <div style="display: flex; align-items: center; gap: 8px"><span style="width: 8px; height: 8px; border-radius: 999px; background: #f59e0b"></span><span style="font-size: 15px; font-weight: 600; color: #fafafa; font-variant-numeric: tabular-nums">240 мс</span></div>
+                <span style="font-size: 12px; color: #71717a; white-space: nowrap">12 с назад</span>
+              </div></div>
+          </div>
+          <div style="flex: 1 1 0; min-width: 0; white-space: nowrap; display: flex; flex-direction: column; gap: 8px; padding: 0 20px; border-right: 1px solid #27272a;">
+            <div style="display: flex; align-items: center; height: 16px"><span style="font-size: 11px; font-weight: 600; color: #71717a; letter-spacing: 0.06em; text-transform: uppercase; flex-grow: 1">Скорость</span></div>
+            <div style="display: flex; flex-direction: column; gap: 4px">
+              <div style="display: flex; align-items: center; gap: 6px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M6 13l6 6 6-6"></path></svg><span style="font-size: 15px; font-weight: 600; color: #fafafa; font-variant-numeric: tabular-nums">2,4 МБ/с</span></div>
+              <div style="display: flex; align-items: center; gap: 6px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M6 11l6-6 6 6"></path></svg><span style="font-size: 13px; color: #a1a1aa; font-variant-numeric: tabular-nums">310 КБ/с</span></div>
+            </div>
+          </div>
+          <div style="flex: 1 1 0; min-width: 0; white-space: nowrap; display: flex; flex-direction: column; gap: 8px; padding: 0 20px; border-right: 1px solid #27272a;">
+            <div style="display: flex; align-items: center; height: 16px"><span style="font-size: 11px; font-weight: 600; color: #71717a; letter-spacing: 0.06em; text-transform: uppercase; flex-grow: 1">Трафик</span></div>
+            <div style="display: flex; flex-direction: column; gap: 4px">
+              <div style="display: flex; align-items: center; gap: 6px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M6 13l6 6 6-6"></path></svg><span style="font-size: 15px; font-weight: 600; color: #fafafa; font-variant-numeric: tabular-nums">1,4 ГиБ</span></div>
+              <div style="display: flex; align-items: center; gap: 6px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M6 11l6-6 6 6"></path></svg><span style="font-size: 13px; color: #a1a1aa; font-variant-numeric: tabular-nums">184 МиБ</span></div>
+            </div>
+          </div>
+          <div style="flex: 1 1 0; min-width: 0; white-space: nowrap; display: flex; flex-direction: column; gap: 8px; padding: 0 20px;">
+            <div style="display: flex; align-items: center; height: 16px"><span style="font-size: 11px; font-weight: 600; color: #71717a; letter-spacing: 0.06em; text-transform: uppercase; flex-grow: 1">В сети</span></div>
+            <div style="display: flex; flex-direction: column; gap: 4px">
+              <span style="font-size: 15px; font-weight: 600; color: #fafafa; font-variant-numeric: tabular-nums">1 ч 04 мин</span>
+              <span style="font-size: 12px; color: #71717a">с 14:02</span>
+            </div>
+          </div>
+        </div></div>
+    </div>
+  <div style="display: grid; grid-template-columns: 300px 1fr; gap: 24px; align-items: center">
+      <div style="display: flex; flex-direction: column; gap: 4px"><span style="font-size: 13px; font-weight: 600; color: #e4e4e7">Пинг: нет ответа</span><span style="font-size: 12px; color: #71717a; line-height: 1.45">google и cloudflare не ответили за 3 с — красная точка</span></div>
+      <div style="padding: 16px; border-radius: 12px; background: #09090b; border: 1px solid #1f1f23"><div style="width: 680px; display: flex; align-items: stretch; padding: 16px 0; border-radius: 16px; background: #131316; border: 1px solid #27272a">
+          <div style="flex: 1 1 0; min-width: 0; white-space: nowrap; display: flex; flex-direction: column; gap: 8px; padding: 0 20px; border-right: 1px solid #27272a;">
+            <div style="display: flex; align-items: center; height: 16px"><span style="font-size: 11px; font-weight: 600; color: #71717a; letter-spacing: 0.06em; text-transform: uppercase; flex-grow: 1">Пинг</span><div title="Измерить заново" style="width: 22px; height: 22px; margin: -3px -4px -3px 0; border-radius: 6px; display: flex; align-items: center; justify-content: center"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#a1a1aa" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-3-6.7"></path><path d="M21 4v5h-5"></path></svg></div></div>
+            <div style="display: flex; align-items: center; gap: 10px">
+              <div style="display: flex; flex-direction: column; gap: 4px; flex-grow: 1; min-width: 0">
+                <div style="display: flex; align-items: center; gap: 8px"><span style="width: 8px; height: 8px; border-radius: 999px; background: #ef4444"></span><span style="font-size: 15px; font-weight: 600; color: #fafafa; font-variant-numeric: tabular-nums">нет ответа</span></div>
+                <span style="font-size: 12px; color: #71717a; white-space: nowrap">туннель не отвечает</span>
+              </div></div>
+          </div>
+          <div style="flex: 1 1 0; min-width: 0; white-space: nowrap; display: flex; flex-direction: column; gap: 8px; padding: 0 20px; border-right: 1px solid #27272a;">
+            <div style="display: flex; align-items: center; height: 16px"><span style="font-size: 11px; font-weight: 600; color: #71717a; letter-spacing: 0.06em; text-transform: uppercase; flex-grow: 1">Скорость</span></div>
+            <div style="display: flex; flex-direction: column; gap: 4px">
+              <div style="display: flex; align-items: center; gap: 6px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M6 13l6 6 6-6"></path></svg><span style="font-size: 15px; font-weight: 600; color: #fafafa; font-variant-numeric: tabular-nums">2,4 МБ/с</span></div>
+              <div style="display: flex; align-items: center; gap: 6px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M6 11l6-6 6 6"></path></svg><span style="font-size: 13px; color: #a1a1aa; font-variant-numeric: tabular-nums">310 КБ/с</span></div>
+            </div>
+          </div>
+          <div style="flex: 1 1 0; min-width: 0; white-space: nowrap; display: flex; flex-direction: column; gap: 8px; padding: 0 20px; border-right: 1px solid #27272a;">
+            <div style="display: flex; align-items: center; height: 16px"><span style="font-size: 11px; font-weight: 600; color: #71717a; letter-spacing: 0.06em; text-transform: uppercase; flex-grow: 1">Трафик</span></div>
+            <div style="display: flex; flex-direction: column; gap: 4px">
+              <div style="display: flex; align-items: center; gap: 6px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M6 13l6 6 6-6"></path></svg><span style="font-size: 15px; font-weight: 600; color: #fafafa; font-variant-numeric: tabular-nums">1,4 ГиБ</span></div>
+              <div style="display: flex; align-items: center; gap: 6px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M6 11l6-6 6 6"></path></svg><span style="font-size: 13px; color: #a1a1aa; font-variant-numeric: tabular-nums">184 МиБ</span></div>
+            </div>
+          </div>
+          <div style="flex: 1 1 0; min-width: 0; white-space: nowrap; display: flex; flex-direction: column; gap: 8px; padding: 0 20px;">
+            <div style="display: flex; align-items: center; height: 16px"><span style="font-size: 11px; font-weight: 600; color: #71717a; letter-spacing: 0.06em; text-transform: uppercase; flex-grow: 1">В сети</span></div>
+            <div style="display: flex; flex-direction: column; gap: 4px">
+              <span style="font-size: 15px; font-weight: 600; color: #fafafa; font-variant-numeric: tabular-nums">1 ч 04 мин</span>
+              <span style="font-size: 12px; color: #71717a">с 14:02</span>
+            </div>
+          </div>
+        </div></div>
+    </div>
+  <div style="display: grid; grid-template-columns: 300px 1fr; gap: 24px; align-items: center">
+      <div style="display: flex; flex-direction: column; gap: 4px"><span style="font-size: 13px; font-weight: 600; color: #e4e4e7">Пинг: идёт замер</span><span style="font-size: 12px; color: #71717a; line-height: 1.45">по клику или раз в минуту; прошлое значение видно</span></div>
+      <div style="padding: 16px; border-radius: 12px; background: #09090b; border: 1px solid #1f1f23"><div style="width: 680px; display: flex; align-items: stretch; padding: 16px 0; border-radius: 16px; background: #131316; border: 1px solid #27272a">
+          <div style="flex: 1 1 0; min-width: 0; white-space: nowrap; display: flex; flex-direction: column; gap: 8px; padding: 0 20px; border-right: 1px solid #27272a;">
+            <div style="display: flex; align-items: center; height: 16px"><span style="font-size: 11px; font-weight: 600; color: #71717a; letter-spacing: 0.06em; text-transform: uppercase; flex-grow: 1">Пинг</span><div title="Измерить заново" style="width: 22px; height: 22px; margin: -3px -4px -3px 0; border-radius: 6px; display: flex; align-items: center; justify-content: center"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke-width="2.4" stroke-linecap="round"><circle cx="12" cy="12" r="9" stroke="#3f3f46"></circle><path d="M12 3a9 9 0 0 1 9 9" stroke="#10b981"></path></svg></div></div>
+            <div style="display: flex; align-items: center; gap: 10px">
+              <div style="display: flex; flex-direction: column; gap: 4px; flex-grow: 1; min-width: 0">
+                <span style="font-size: 15px; font-weight: 600; color: #a1a1aa">измеряю…</span>
+                <span style="font-size: 12px; color: #71717a">прошлый раз 86 мс</span>
+              </div></div>
+          </div>
+          <div style="flex: 1 1 0; min-width: 0; white-space: nowrap; display: flex; flex-direction: column; gap: 8px; padding: 0 20px; border-right: 1px solid #27272a;">
+            <div style="display: flex; align-items: center; height: 16px"><span style="font-size: 11px; font-weight: 600; color: #71717a; letter-spacing: 0.06em; text-transform: uppercase; flex-grow: 1">Скорость</span></div>
+            <div style="display: flex; flex-direction: column; gap: 4px">
+              <div style="display: flex; align-items: center; gap: 6px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M6 13l6 6 6-6"></path></svg><span style="font-size: 15px; font-weight: 600; color: #fafafa; font-variant-numeric: tabular-nums">2,4 МБ/с</span></div>
+              <div style="display: flex; align-items: center; gap: 6px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M6 11l6-6 6 6"></path></svg><span style="font-size: 13px; color: #a1a1aa; font-variant-numeric: tabular-nums">310 КБ/с</span></div>
+            </div>
+          </div>
+          <div style="flex: 1 1 0; min-width: 0; white-space: nowrap; display: flex; flex-direction: column; gap: 8px; padding: 0 20px; border-right: 1px solid #27272a;">
+            <div style="display: flex; align-items: center; height: 16px"><span style="font-size: 11px; font-weight: 600; color: #71717a; letter-spacing: 0.06em; text-transform: uppercase; flex-grow: 1">Трафик</span></div>
+            <div style="display: flex; flex-direction: column; gap: 4px">
+              <div style="display: flex; align-items: center; gap: 6px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M6 13l6 6 6-6"></path></svg><span style="font-size: 15px; font-weight: 600; color: #fafafa; font-variant-numeric: tabular-nums">1,4 ГиБ</span></div>
+              <div style="display: flex; align-items: center; gap: 6px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M6 11l6-6 6 6"></path></svg><span style="font-size: 13px; color: #a1a1aa; font-variant-numeric: tabular-nums">184 МиБ</span></div>
+            </div>
+          </div>
+          <div style="flex: 1 1 0; min-width: 0; white-space: nowrap; display: flex; flex-direction: column; gap: 8px; padding: 0 20px;">
+            <div style="display: flex; align-items: center; height: 16px"><span style="font-size: 11px; font-weight: 600; color: #71717a; letter-spacing: 0.06em; text-transform: uppercase; flex-grow: 1">В сети</span></div>
+            <div style="display: flex; flex-direction: column; gap: 4px">
+              <span style="font-size: 15px; font-weight: 600; color: #fafafa; font-variant-numeric: tabular-nums">1 ч 04 мин</span>
+              <span style="font-size: 12px; color: #71717a">с 14:02</span>
+            </div>
+          </div>
+        </div></div>
+    </div>
+  <div style="display: grid; grid-template-columns: 300px 1fr; gap: 24px; align-items: center">
+      <div style="display: flex; flex-direction: column; gap: 4px"><span style="font-size: 13px; font-weight: 600; color: #e4e4e7">Режим прокси</span><span style="font-size: 12px; color: #71717a; line-height: 1.45">трафик идёт мимо приложения, пинг не измерить</span></div>
+      <div style="padding: 16px; border-radius: 12px; background: #09090b; border: 1px solid #1f1f23"><div style="width: 680px; display: flex; align-items: stretch; padding: 16px 0; border-radius: 16px; background: #131316; border: 1px solid #27272a">
+          <div style="flex: 1 1 0; min-width: 0; white-space: nowrap; display: flex; flex-direction: column; gap: 8px; padding: 0 20px; border-right: 1px solid #27272a;">
+            <div style="display: flex; align-items: center; height: 16px"><span style="font-size: 11px; font-weight: 600; color: #71717a; letter-spacing: 0.06em; text-transform: uppercase; flex-grow: 1">Пинг</span></div>
+            <div style="display: flex; flex-direction: column; gap: 4px">
+                <span style="font-size: 15px; font-weight: 600; color: #a1a1aa">—</span>
+                <span style="font-size: 12px; color: #71717a">только в режиме VPN</span>
+              </div>
+          </div>
+          <div style="flex: 1 1 0; min-width: 0; white-space: nowrap; display: flex; flex-direction: column; gap: 8px; padding: 0 20px; border-right: 1px solid #27272a;">
+            <div style="display: flex; align-items: center; height: 16px"><span style="font-size: 11px; font-weight: 600; color: #71717a; letter-spacing: 0.06em; text-transform: uppercase; flex-grow: 1">Скорость</span></div>
+            <div style="display: flex; flex-direction: column; gap: 4px">
+              <div style="display: flex; align-items: center; gap: 6px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M6 13l6 6 6-6"></path></svg><span style="font-size: 15px; font-weight: 600; color: #fafafa; font-variant-numeric: tabular-nums">2,4 МБ/с</span></div>
+              <div style="display: flex; align-items: center; gap: 6px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M6 11l6-6 6 6"></path></svg><span style="font-size: 13px; color: #a1a1aa; font-variant-numeric: tabular-nums">310 КБ/с</span></div>
+            </div>
+          </div>
+          <div style="flex: 1 1 0; min-width: 0; white-space: nowrap; display: flex; flex-direction: column; gap: 8px; padding: 0 20px; border-right: 1px solid #27272a;">
+            <div style="display: flex; align-items: center; height: 16px"><span style="font-size: 11px; font-weight: 600; color: #71717a; letter-spacing: 0.06em; text-transform: uppercase; flex-grow: 1">Трафик</span></div>
+            <div style="display: flex; flex-direction: column; gap: 4px">
+              <div style="display: flex; align-items: center; gap: 6px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M6 13l6 6 6-6"></path></svg><span style="font-size: 15px; font-weight: 600; color: #fafafa; font-variant-numeric: tabular-nums">1,4 ГиБ</span></div>
+              <div style="display: flex; align-items: center; gap: 6px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M6 11l6-6 6 6"></path></svg><span style="font-size: 13px; color: #a1a1aa; font-variant-numeric: tabular-nums">184 МиБ</span></div>
+            </div>
+          </div>
+          <div style="flex: 1 1 0; min-width: 0; white-space: nowrap; display: flex; flex-direction: column; gap: 8px; padding: 0 20px;">
+            <div style="display: flex; align-items: center; height: 16px"><span style="font-size: 11px; font-weight: 600; color: #71717a; letter-spacing: 0.06em; text-transform: uppercase; flex-grow: 1">В сети</span></div>
+            <div style="display: flex; flex-direction: column; gap: 4px">
+              <span style="font-size: 15px; font-weight: 600; color: #fafafa; font-variant-numeric: tabular-nums">1 ч 04 мин</span>
+              <span style="font-size: 12px; color: #71717a">с 14:02</span>
+            </div>
+          </div>
+        </div></div>
+    </div>
+  <div style="display: grid; grid-template-columns: 300px 1fr; gap: 24px; align-items: center">
+      <div style="display: flex; flex-direction: column; gap: 4px"><span style="font-size: 13px; font-weight: 600; color: #e4e4e7">Счётчики недоступны</span><span style="font-size: 12px; color: #71717a; line-height: 1.45">вместо скорости и трафика — причина</span></div>
+      <div style="padding: 16px; border-radius: 12px; background: #09090b; border: 1px solid #1f1f23"><div style="width: 680px; display: flex; align-items: stretch; padding: 16px 0; border-radius: 16px; background: #131316; border: 1px solid #27272a">
+          <div style="flex: 1 1 0; min-width: 0; white-space: nowrap; display: flex; flex-direction: column; gap: 8px; padding: 0 20px; border-right: 1px solid #27272a;">
+            <div style="display: flex; align-items: center; height: 16px"><span style="font-size: 11px; font-weight: 600; color: #71717a; letter-spacing: 0.06em; text-transform: uppercase; flex-grow: 1">Пинг</span><div title="Измерить заново" style="width: 22px; height: 22px; margin: -3px -4px -3px 0; border-radius: 6px; display: flex; align-items: center; justify-content: center"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#a1a1aa" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-3-6.7"></path><path d="M21 4v5h-5"></path></svg></div></div>
+            <div style="display: flex; align-items: center; gap: 10px">
+              <div style="display: flex; flex-direction: column; gap: 4px; flex-grow: 1; min-width: 0">
+                <div style="display: flex; align-items: center; gap: 8px"><span style="width: 8px; height: 8px; border-radius: 999px; background: #10b981"></span><span style="font-size: 15px; font-weight: 600; color: #fafafa; font-variant-numeric: tabular-nums">86 мс</span></div>
+                <span style="font-size: 12px; color: #71717a; white-space: nowrap">12 с назад</span>
+              </div></div>
+          </div>
+          <div style="flex: 1 1 0; min-width: 0; white-space: nowrap; display: flex; flex-direction: column; gap: 8px; padding: 0 20px; border-right: 1px solid #27272a; flex-grow: 2; white-space: normal;">
+            <div style="display: flex; align-items: center; height: 16px"><span style="font-size: 11px; font-weight: 600; color: #71717a; letter-spacing: 0.06em; text-transform: uppercase; flex-grow: 1">Скорость и трафик</span></div>
+            <span style="font-size: 13px; color: #a1a1aa; line-height: 1.4">Счётчики недоступны: адаптер ещё не найден</span>
+          </div>
+          <div style="flex: 1 1 0; min-width: 0; white-space: nowrap; display: flex; flex-direction: column; gap: 8px; padding: 0 20px;">
+            <div style="display: flex; align-items: center; height: 16px"><span style="font-size: 11px; font-weight: 600; color: #71717a; letter-spacing: 0.06em; text-transform: uppercase; flex-grow: 1">В сети</span></div>
+            <div style="display: flex; flex-direction: column; gap: 4px">
+              <span style="font-size: 15px; font-weight: 600; color: #fafafa; font-variant-numeric: tabular-nums">1 ч 04 мин</span>
+              <span style="font-size: 12px; color: #71717a">с 14:02</span>
+            </div>
+          </div>
+        </div></div>
+    </div>
+  <div style="display: grid; grid-template-columns: 300px 1fr; gap: 24px; align-items: center">
+      <div style="display: flex; flex-direction: column; gap: 4px"><span style="font-size: 13px; font-weight: 600; color: #e4e4e7">Светлая тема</span><span style="font-size: 12px; color: #71717a; line-height: 1.45">те же места, токены zinc</span></div>
+      <div style="padding: 16px; border-radius: 12px; background: #fafafa; border: 1px solid #1f1f23"><div style="width: 680px; display: flex; align-items: stretch; padding: 16px 0; border-radius: 16px; background: #ffffff; border: 1px solid #e4e4e7">
+          <div style="flex: 1 1 0; min-width: 0; white-space: nowrap; display: flex; flex-direction: column; gap: 8px; padding: 0 20px; border-right: 1px solid #e4e4e7;">
+            <div style="display: flex; align-items: center; height: 16px"><span style="font-size: 11px; font-weight: 600; color: #71717a; letter-spacing: 0.06em; text-transform: uppercase; flex-grow: 1">Пинг</span><div title="Измерить заново" style="width: 22px; height: 22px; margin: -3px -4px -3px 0; border-radius: 6px; display: flex; align-items: center; justify-content: center"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#52525b" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-3-6.7"></path><path d="M21 4v5h-5"></path></svg></div></div>
+            <div style="display: flex; align-items: center; gap: 10px">
+              <div style="display: flex; flex-direction: column; gap: 4px; flex-grow: 1; min-width: 0">
+                <div style="display: flex; align-items: center; gap: 8px"><span style="width: 8px; height: 8px; border-radius: 999px; background: #10b981"></span><span style="font-size: 15px; font-weight: 600; color: #18181b; font-variant-numeric: tabular-nums">86 мс</span></div>
+                <span style="font-size: 12px; color: #71717a; white-space: nowrap">12 с назад</span>
+              </div></div>
+          </div>
+          <div style="flex: 1 1 0; min-width: 0; white-space: nowrap; display: flex; flex-direction: column; gap: 8px; padding: 0 20px; border-right: 1px solid #e4e4e7;">
+            <div style="display: flex; align-items: center; height: 16px"><span style="font-size: 11px; font-weight: 600; color: #71717a; letter-spacing: 0.06em; text-transform: uppercase; flex-grow: 1">Скорость</span></div>
+            <div style="display: flex; flex-direction: column; gap: 4px">
+              <div style="display: flex; align-items: center; gap: 6px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M6 13l6 6 6-6"></path></svg><span style="font-size: 15px; font-weight: 600; color: #18181b; font-variant-numeric: tabular-nums">2,4 МБ/с</span></div>
+              <div style="display: flex; align-items: center; gap: 6px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M6 11l6-6 6 6"></path></svg><span style="font-size: 13px; color: #52525b; font-variant-numeric: tabular-nums">310 КБ/с</span></div>
+            </div>
+          </div>
+          <div style="flex: 1 1 0; min-width: 0; white-space: nowrap; display: flex; flex-direction: column; gap: 8px; padding: 0 20px; border-right: 1px solid #e4e4e7;">
+            <div style="display: flex; align-items: center; height: 16px"><span style="font-size: 11px; font-weight: 600; color: #71717a; letter-spacing: 0.06em; text-transform: uppercase; flex-grow: 1">Трафик</span></div>
+            <div style="display: flex; flex-direction: column; gap: 4px">
+              <div style="display: flex; align-items: center; gap: 6px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M6 13l6 6 6-6"></path></svg><span style="font-size: 15px; font-weight: 600; color: #18181b; font-variant-numeric: tabular-nums">1,4 ГиБ</span></div>
+              <div style="display: flex; align-items: center; gap: 6px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M6 11l6-6 6 6"></path></svg><span style="font-size: 13px; color: #52525b; font-variant-numeric: tabular-nums">184 МиБ</span></div>
+            </div>
+          </div>
+          <div style="flex: 1 1 0; min-width: 0; white-space: nowrap; display: flex; flex-direction: column; gap: 8px; padding: 0 20px;">
+            <div style="display: flex; align-items: center; height: 16px"><span style="font-size: 11px; font-weight: 600; color: #71717a; letter-spacing: 0.06em; text-transform: uppercase; flex-grow: 1">В сети</span></div>
+            <div style="display: flex; flex-direction: column; gap: 4px">
+              <span style="font-size: 15px; font-weight: 600; color: #18181b; font-variant-numeric: tabular-nums">1 ч 04 мин</span>
+              <span style="font-size: 12px; color: #71717a">с 14:02</span>
+            </div>
+          </div>
+        </div></div>
+    </div>
+  <div><div style="display: grid; grid-template-columns: 300px 1fr; gap: 24px; align-items: center">
+      <div style="display: flex; flex-direction: column; gap: 4px"><span style="font-size: 13px; font-weight: 600; color: #e4e4e7">Свёрнутая шапка</span><span style="font-size: 12px; color: #71717a; line-height: 1.45">список профилей развёрнут: карточка сжимается в строку справа от статуса</span></div>
+      <div style="padding: 16px; border-radius: 12px; background: #09090b; border: 1px solid #1f1f23"><div style="display: flex; align-items: center; gap: 14px">
+        <div style="width: 44px; height: 44px; border-radius: 999px; background: radial-gradient(circle at 50% 42%, #064e3b 0%, #052e24 55%, #04231d 100%); border: 2px solid #10b981; display: flex; align-items: center; justify-content: center; flex-shrink: 0"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#34d399" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v9"></path><path d="M18.4 6.6a9 9 0 1 1-12.8 0"></path></svg></div>
+        <div style="display: flex; flex-direction: column; gap: 2px; flex-grow: 1"><span style="font-size: 15px; font-weight: 600; color: #fafafa">Подключено</span><span style="font-size: 12px; color: #71717a">vdsina NL01 · туннель поднят</span></div>
+        <div style="display: flex; align-items: center; gap: 14px; font-size: 12px; color: #a1a1aa; font-variant-numeric: tabular-nums">
+          <span style="display: flex; align-items: center; gap: 6px"><span style="width: 6px; height: 6px; border-radius: 999px; background: #10b981"></span>86 мс</span>
+          <span style="display: flex; align-items: center; gap: 4px"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M6 13l6 6 6-6"></path></svg>2,4 МБ/с</span>
+          <span style="display: flex; align-items: center; gap: 4px"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M6 11l6-6 6 6"></path></svg>310 КБ/с</span>
+          <span>1 ч 04 мин</span>
+        </div>
+      </div></div>
+    </div></div>
+</div>
+</x-dc>
+</body>
+</html>
