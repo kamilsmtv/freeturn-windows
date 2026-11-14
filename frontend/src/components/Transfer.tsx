@@ -68,6 +68,9 @@ export function ShareDialog({ profile, onClose }: { profile: Profile; onClose: (
   // гостя не авторизует - сервер его просто не знает.
   const [guest, setGuest] = useState("");
   const [serverLink, setServerLink] = useState("");
+  // Имя, на которое сервер завёл доступ: поле ввода могут поменять уже
+  // после «Создать», а подписывать QR и файл чужим именем нельзя.
+  const [createdFor, setCreatedFor] = useState("");
   const [creating, setCreating] = useState(false);
   // Отказ сервера держим отдельно от ошибок сборки ссылки: место ошибки
   // должно совпадать с местом кнопки, иначе её просто не видно - она
@@ -102,13 +105,25 @@ export function ShareDialog({ profile, onClose }: { profile: Profile; onClose: (
       api
         .ExportLink(profile.id, includeVK, clientId)
         .then((v) => alive && setUrl(v))
-        .catch((e) => alive && setError(String(e)));
+        .catch((e) => {
+          if (!alive) return;
+          // Прежнюю ссылку убираем: иначе на экране остался бы QR, который
+          // не соответствует введённому.
+          setUrl("");
+          setError(String(e));
+        });
     }, 200);
     return () => {
       alive = false;
       clearTimeout(timer);
     };
   }), [profile.id, includeVK, clientId]);
+
+  // Ручной id стёрли - решение показать «только настройки» принималось при
+  // другом раскладе и заново должно приниматься явно.
+  useEffect(() => {
+    if (clientId.trim() === "") setForceSettingsOnly(false);
+  }, [clientId]);
 
   return (
     <Modal title={`Поделиться профилем «${profile.name}»`} onClose={onClose}>
@@ -130,7 +145,9 @@ export function ShareDialog({ profile, onClose }: { profile: Profile; onClose: (
                   setServerError("");
                   setCreating(true);
                   try {
-                    setServerLink((await api?.VPSAddPeer(profile.id, guest.trim())) ?? "");
+                    const name = guest.trim();
+                    setServerLink((await api?.VPSAddPeer(profile.id, name)) ?? "");
+                    setCreatedFor(name);
                   } catch (e) {
                     setServerError(String(e));
                   } finally {
@@ -206,7 +223,7 @@ export function ShareDialog({ profile, onClose }: { profile: Profile; onClose: (
                 // В файл уходит то же, что на экране: гостевая ссылка от
                 // сервера, а не заново собранная из профиля.
                 const path = serverLink
-                  ? await api?.SaveLinkToFile(guest.trim() || profile.name, serverLink)
+                  ? await api?.SaveLinkToFile(createdFor || profile.name, serverLink)
                   : await api?.ExportLinkToFile(profile.id, includeVK, clientId);
                 if (path) setSaved(path);
               } catch (e) {
@@ -253,7 +270,7 @@ export function ShareDialog({ profile, onClose }: { profile: Profile; onClose: (
 
         {shown && (
           <>
-            <QRCode text={shown} name={guest.trim() || profile.name} />
+            <QRCode text={shown} name={createdFor || profile.name} />
             <Field label="Ссылка">
               <TextArea value={shown} onChange={() => {}} rows={4} />
             </Field>

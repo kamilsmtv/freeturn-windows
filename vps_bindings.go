@@ -442,13 +442,22 @@ func guestLink(p profile.Profile, name string, data vps.ClientData) string {
 		switch {
 		case lerr != nil:
 			// Ссылку не поняли - соберём свою ниже.
-		case strings.TrimSpace(l.WGConf) != "":
+		case strings.TrimSpace(l.WGConf) != "" && strings.TrimSpace(l.ClientID) != "":
 			// Сервер вложил конфигурацию сам: отдаём его ссылку как есть.
 			// Пересобирать её нельзя - поля, которых нет в нашей модели,
 			// при этом потерялись бы, а сервер новее клиента почти всегда.
 			return raw
 		default:
-			return l.WithWGConf(conf).Encode()
+			// Без client-id гость не пройдёт allowlist: клиент подставит
+			// id своего устройства. Потерять незнакомое поле при пересборке
+			// меньшее зло, чем выдать ссылку, по которой не подключиться.
+			if strings.TrimSpace(l.ClientID) == "" {
+				l.ClientID = data.Client.ClientID
+			}
+			if strings.TrimSpace(l.WGConf) == "" {
+				l = l.WithWGConf(conf)
+			}
+			return l.Encode()
 		}
 	}
 

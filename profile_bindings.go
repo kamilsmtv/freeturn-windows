@@ -84,6 +84,11 @@ func (a *App) ImportLink(raw string) (profile.Profile, error) {
 // Ссылка на звонок VK и client-id уникальны для получателя, поэтому
 // вкладываются только по явному выбору пользователя.
 func (a *App) ExportLink(id string, includeVKLink bool, clientID string) (string, error) {
+	// Кривой id ядро получателя не примет, а сервер такой и не выдаст:
+	// ссылка с ним не работает ни при каком раскладе.
+	if c := strings.TrimSpace(clientID); c != "" && !profile.ValidClientID(c) {
+		return "", errors.New("Client ID - это 32 шестнадцатеричных символа; нажмите «Создать», чтобы получить верный")
+	}
 	p, err := a.profiles.Get(id)
 	if err != nil {
 		return "", err
