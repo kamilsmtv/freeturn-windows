@@ -10,7 +10,10 @@ package ping
 import (
 	"context"
 	"errors"
+	"net"
 	"net/http"
+	"net/http/httptrace"
+	"net/netip"
 	"sync"
 	"time"
 )
@@ -63,31 +66,32 @@ func New() *Meter {
 	}
 }
 
-// Measure возвращает задержку одного запроса. Замеры не идут параллельно:
-// второй клик во время первого дождётся его и сделает свой.
-func (m *Meter) Measure(ctx context.Context) (time.Duration, error) {
+// Measure возвращает задержку одного запроса и адрес, на который он ушёл:
+// по адресу вызывающий решает, прошёл ли запрос через туннель. Замеры не
+// идут параллельно: второй клик во время первого дождётся его.
+func (m *Meter) Measure(ctx context.Context) (time.Duration, netip.Addr, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
 	for _, url := range m.targets {
 		if time.Since(m.lastOK) > staleAfter {
-			if _, err := m.probe(ctx, url); err != nil {
+			if _, _, err := m.probe(ctx, url); err != nil {
 				m.reset()
 				continue
 			}
 		}
-		d, err := m.probe(ctx, url)
+		d, remote, err := m.probe(ctx, url)
 		if err != nil {
 			m.reset()
 			continue
 		}
 		m.lastOK = time.Now()
-		return d, nil
+		return d, remote, nil
 	}
 	if err := ctx.Err(); err != nil {
-		return 0, err
+		return 0, netip.Addr{}, err
 	}
-	return 0, ErrNoAnswer
+	return 0, netip.Addr{}, ErrNoAnswer
 }
 
 // Reset забывает соединение: после переподключения туннеля старое
@@ -103,17 +107,23 @@ func (m *Meter) reset() {
 	m.client.CloseIdleConnections()
 }
 
-func (m *Meter) probe(ctx context.Context, url string) (time.Duration, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+func (m *Meter) probe(ctx context.Context, url string) (time.Duration, netip.Addr, error) {
+	var remote netip.Addr
+	trace := &httptrace.ClientTrace{GotConn: func(info httptrace.GotConnInfo) {
+		if a, ok := info.Conn.RemoteAddr().(*net.TCPAddr); ok {
+			remote = a.AddrPort().Addr().Unmap()
+		}
+	}}
+	req, err := http.NewRequestWithContext(httptrace.WithClientTrace(ctx, trace), http.MethodGet, url, nil)
 	if err != nil {
-		return 0, err
+		return 0, remote, err
 	}
 	start := time.Now()
 	resp, err := m.client.Do(req)
 	if err != nil {
-		return 0, err
+		return 0, remote, err
 	}
 	d := time.Since(start)
 	_ = resp.Body.Close()
-	return d, nil
+	return d, remote, nil
 }

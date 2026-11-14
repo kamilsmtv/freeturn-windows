@@ -47,8 +47,12 @@ func (a *App) SetSplitShared(mode, subnets string) error {
 	if mode == "" {
 		mode = "all"
 	}
-	if _, err := wg.AllowedIPs(mode, subnets); err != nil {
-		return errors.New("общие правила: " + err.Error())
+	// В режиме «весь трафик» поле подсетей скрыто, и мусор в нём ни на что
+	// не влияет - отказывать из-за него в сохранении профиля незачем.
+	if mode != wg.SplitAll {
+		if _, err := wg.AllowedIPs(mode, subnets); err != nil {
+			return errors.New("общие правила: " + err.Error())
+		}
 	}
 	s := a.settings.Get()
 	s.SplitShared = &settings.SplitRules{Mode: mode, Subnets: strings.TrimSpace(subnets)}

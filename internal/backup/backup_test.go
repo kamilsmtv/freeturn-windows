@@ -221,3 +221,29 @@ func TestSplitSharedRoundTrip(t *testing.T) {
 		t.Errorf("пустой набор восстановился как %+v", got.SplitShared)
 	}
 }
+
+// Режим «только подсети» Android понял бы как «только приложения» с пустым
+// списком: ему уходит «весь трафик», а наш режим едет под своим ключом.
+func TestSplitSharedAndroidCompat(t *testing.T) {
+	d := Data{
+		OwnClientID: profile.NewClientID(),
+		SplitShared: &settings.SplitRules{Mode: "include", Subnets: "10.0.0.0/8"},
+	}
+	blob, _ := Export(d, "pass")
+	payload, _ := Decrypt(blob, "pass")
+	var obj map[string]any
+	_ = json.Unmarshal(payload, &obj)
+	if obj["splitSharedMode"] != "all" {
+		t.Errorf("Android получил режим %v", obj["splitSharedMode"])
+	}
+	got, _ := Import(blob, "pass")
+	if got.SplitShared == nil || got.SplitShared.Mode != "include" {
+		t.Errorf("свой режим потерялся: %+v", got.SplitShared)
+	}
+
+	// Бэкап Android: include без подсетей не должен ломать подключение.
+	raw := map[string]json.RawMessage{"splitSharedMode": json.RawMessage(`"include"`)}
+	if r := decodeSplitShared(raw); r == nil || r.Mode != "all" {
+		t.Errorf("андроидный include без подсетей = %+v", r)
+	}
+}

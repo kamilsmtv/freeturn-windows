@@ -24,17 +24,20 @@ func TestWarmUpOnFirstMeasure(t *testing.T) {
 	defer srv.Close()
 
 	m := meter(srv.URL)
-	if _, err := m.Measure(context.Background()); err != nil {
+	if _, _, err := m.Measure(context.Background()); err != nil {
 		t.Fatalf("Measure: %v", err)
 	}
 	if hits.Load() != 2 {
 		t.Errorf("запросов %d, ожидался прогрев и замер", hits.Load())
 	}
-	if _, err := m.Measure(context.Background()); err != nil {
+	if _, _, err := m.Measure(context.Background()); err != nil {
 		t.Fatalf("Measure: %v", err)
 	}
 	if hits.Load() != 3 {
 		t.Errorf("тёплый замер прогрелся заново: запросов %d", hits.Load())
+	}
+	if _, remote, _ := m.Measure(context.Background()); !remote.IsLoopback() {
+		t.Errorf("адрес узла не определён: %v", remote)
 	}
 }
 
@@ -47,7 +50,7 @@ func TestFallsBackToSecondTarget(t *testing.T) {
 	}))
 	defer alive.Close()
 
-	if _, err := meter(deadURL, alive.URL).Measure(context.Background()); err != nil {
+	if _, _, err := meter(deadURL, alive.URL).Measure(context.Background()); err != nil {
 		t.Fatalf("второй адрес не выручил: %v", err)
 	}
 }
@@ -63,7 +66,7 @@ func TestNoAnswer(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
 	defer cancel()
-	if _, err := meter(slow.URL).Measure(ctx); err == nil {
+	if _, _, err := meter(slow.URL).Measure(ctx); err == nil {
 		t.Fatal("молчащий узел дал результат")
 	}
 }

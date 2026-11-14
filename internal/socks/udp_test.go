@@ -187,3 +187,29 @@ func TestParseUDPHeader(t *testing.T) {
 		}
 	}
 }
+
+// Сосед сменил сокет посреди ассоциации: ответы должны идти на новый порт.
+func TestUDPRepliesFollowNewPort(t *testing.T) {
+	echo := udpEcho(t)
+	s := start(t, Options{UDP: true})
+	_, code, relayAddr := associate(t, s.Addr(), "", "")
+	if code != replyOK {
+		t.Fatalf("код ответа = %d", code)
+	}
+	dst := echo.LocalAddr().(*net.UDPAddr).AddrPort()
+
+	for i := 0; i < 2; i++ {
+		cl, err := net.DialUDP("udp", nil, relayAddr)
+		if err != nil {
+			t.Fatalf("DialUDP: %v", err)
+		}
+		_ = cl.SetDeadline(time.Now().Add(3 * time.Second))
+		if _, err := cl.Write(wrap(dst, []byte("x"))); err != nil {
+			t.Fatalf("Write: %v", err)
+		}
+		if _, err := cl.Read(make([]byte, 64)); err != nil {
+			t.Fatalf("сокет %d не получил ответ: %v", i+1, err)
+		}
+		_ = cl.Close()
+	}
+}

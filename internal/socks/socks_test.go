@@ -6,6 +6,7 @@ import (
 	"errors"
 	"io"
 	"net"
+	"net/netip"
 	"strconv"
 	"strings"
 	"sync"
@@ -374,6 +375,33 @@ func TestLoopbackDeniedByName(t *testing.T) {
 
 	_, code := dialSocks(t, s.Addr(), "", "", net.JoinHostPort("localhost", port))
 	if code != replyNotAllowed {
+		t.Errorf("код ответа = %d, ожидался запрет %d", code, replyNotAllowed)
+	}
+}
+
+// IPv6 туннель не ведёт: такой запрос ушёл бы мимо него, поэтому запрещён.
+func TestCheckTarget(t *testing.T) {
+	for addr, want := range map[string]error{
+		"8.8.8.8":         nil,
+		"::ffff:8.8.8.8":  nil,
+		"127.0.0.1":       errLoopback,
+		"0.0.0.0":         errLoopback,
+		"::1":             errLoopback,
+		"2001:4860::8888": errIPv6,
+	} {
+		if got := checkTarget(Options{}, netip.MustParseAddr(addr)); !errors.Is(got, want) {
+			t.Errorf("%s: %v, want %v", addr, got, want)
+		}
+	}
+}
+
+func TestIPv6TargetDenied(t *testing.T) {
+	s := New()
+	if err := s.Start(Options{Listen: "127.0.0.1:0"}); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	t.Cleanup(s.Stop)
+	if _, code := dialSocks(t, s.Addr(), "", "", "[2001:db8::1]:443"); code != replyNotAllowed {
 		t.Errorf("код ответа = %d, ожидался запрет %d", code, replyNotAllowed)
 	}
 }

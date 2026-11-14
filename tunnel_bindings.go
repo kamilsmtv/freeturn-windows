@@ -226,6 +226,7 @@ func (a *App) startTunnel(p profile.Profile) error {
 	if err != nil {
 		return err
 	}
+	a.tunnelRoutes.Store(&allowed)
 
 	a.core.AppendLog("info", "Туннель поднят: адаптер "+name+
 		", DNS "+formatAddrs(cfg.DNS)+", маршруты "+wg.FormatPrefixes(allowed))
@@ -457,6 +458,7 @@ func (a *App) stopTunnel() {
 
 	a.raiseMu.Lock()
 	defer a.raiseMu.Unlock()
+	a.tunnelRoutes.Store(nil)
 
 	// Раздачу снимаем первой: её соединения идут через туннель, и жить
 	// после его исчезновения им незачем.

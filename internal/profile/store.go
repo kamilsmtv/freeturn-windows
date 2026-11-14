@@ -217,6 +217,9 @@ func (s *Store) ReplaceBySub(subURL string, incoming []Profile) error {
 			if p.Client.ClientID == "" {
 				p.Client.ClientID = old.Client.ClientID
 			}
+			// Подписка о раздельном туннелировании ничего не знает, а
+			// галочку «Общие для всех профилей» ставил пользователь.
+			p.Client.SplitTunnelShared = old.Client.SplitTunnelShared
 		}
 		kept = append(kept, p)
 	}

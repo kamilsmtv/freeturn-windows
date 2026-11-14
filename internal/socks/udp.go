@@ -32,8 +32,22 @@ const cmdUDPAssociate = 0x03
 // maxDatagram - больше UDP через IPv4 не унесёт.
 const maxDatagram = 64 * 1024
 
-// resolveTimeout - сколько ждём DNS для датаграммы с именем узла.
-const resolveTimeout = 5 * time.Second
+// resolveTimeout - сколько ждём DNS для датаграммы с именем узла. Пока
+// ждём, стоит весь приём, поэтому срок короткий.
+const resolveTimeout = 2 * time.Second
+
+// nameTTL и failTTL - сколько помнить ответ DNS и отказ. Отказ помним,
+// чтобы поток датаграмм на несуществующее имя не вешал приём на каждой.
+const (
+	nameTTL = 5 * time.Minute
+	failTTL = 30 * time.Second
+)
+
+// nameEntry - запись кеша имён; пустой ip означает отказ.
+type nameEntry struct {
+	ip    netip.Addr
+	until time.Time
+}
 
 // relay - общий UDP-сокет сервера и таблица ассоциаций.
 type relay struct {
@@ -57,11 +71,10 @@ type relay struct {
 type assoc struct {
 	r      *relay
 	ip     netip.Addr
-	port   uint16 // объявленный клиентом порт, 0 - не объявлен
 	out    *net.UDPConn
 	mu     sync.Mutex
 	client netip.AddrPort // куда отдавать ответы; пусто до первой датаграммы
-	names  map[string]netip.Addr
+	names  map[string]nameEntry
 	done   chan struct{}
 }
 
@@ -98,7 +111,7 @@ func (r *relay) open(ip netip.Addr, declared netip.AddrPort) (*assoc, error) {
 		r:     r,
 		ip:    ip.Unmap(),
 		out:   out,
-		names: map[string]netip.Addr{},
+		names: map[string]nameEntry{},
 		done:  make(chan struct{}),
 	}
 
@@ -106,7 +119,6 @@ func (r *relay) open(ip netip.Addr, declared netip.AddrPort) (*assoc, error) {
 	// Объявленный адрес берём, только если он указывает на того же
 	// клиента: иначе сосед мог бы попросить слать ответы третьей машине.
 	if declared.Port() != 0 && (declared.Addr().Unmap() == a.ip || declared.Addr().IsUnspecified()) {
-		a.port = declared.Port()
 		a.client = netip.AddrPortFrom(a.ip, declared.Port())
 		r.byAddr[a.client] = a
 	} else {
@@ -205,6 +217,11 @@ func (r *relay) serve() {
 			// отвечать сканеру незачем.
 			continue
 		}
+		// Ответы уходят туда, откуда пришла последняя датаграмма: если
+		// приложение соседа сменило сокет, старый порт ответов уже не ждёт.
+		a.mu.Lock()
+		a.client = netip.AddrPortFrom(src.Addr().Unmap(), src.Port())
+		a.mu.Unlock()
 		a.send(buf[:n])
 	}
 }
@@ -220,7 +237,7 @@ func (a *assoc) send(pkt []byte) {
 		logf(a.r.o, "debug", "SOCKS5 UDP: "+host+" не разрешён: "+err.Error())
 		return
 	}
-	if !a.r.o.allowLoopback && (dst.IsLoopback() || dst.IsUnspecified()) {
+	if checkTarget(a.r.o, dst) != nil {
 		return
 	}
 	_, _ = a.out.WriteToUDPAddrPort(data, netip.AddrPortFrom(dst, port))
@@ -232,26 +249,36 @@ func (a *assoc) resolve(host string) (netip.Addr, error) {
 	if ip, err := netip.ParseAddr(host); err == nil {
 		return ip.Unmap(), nil
 	}
-	if ip, ok := a.names[host]; ok {
-		return ip, nil
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), resolveTimeout)
-	defer cancel()
-	ips, err := net.DefaultResolver.LookupNetIP(ctx, "ip4", host)
-	if err != nil || len(ips) == 0 {
-		ips, err = net.DefaultResolver.LookupNetIP(ctx, "ip", host)
-	}
-	if err != nil {
-		return netip.Addr{}, err
-	}
-	if len(ips) == 0 {
-		return netip.Addr{}, errors.New("нет адресов")
+	now := time.Now()
+	if e, ok := a.names[host]; ok && now.Before(e.until) {
+		if !e.ip.IsValid() {
+			return netip.Addr{}, errors.New("недавно не разрешилось")
+		}
+		return e.ip, nil
 	}
 	if len(a.names) > 256 {
 		clear(a.names)
 	}
+	ctx, cancel := context.WithTimeout(context.Background(), resolveTimeout)
+	defer cancel()
+	ips, err := net.DefaultResolver.LookupNetIP(ctx, "ip", host)
+	if err == nil && len(ips) == 0 {
+		err = errors.New("нет адресов")
+	}
+	if err != nil {
+		a.names[host] = nameEntry{until: now.Add(failTTL)}
+		return netip.Addr{}, err
+	}
+	// IPv4 предпочтительнее: туннель уводит только 0.0.0.0/0, а IPv6
+	// политика раздачи всё равно не пропустит (см. checkTarget).
 	ip := ips[0].Unmap()
-	a.names[host] = ip
+	for _, c := range ips {
+		if c.Unmap().Is4() {
+			ip = c.Unmap()
+			break
+		}
+	}
+	a.names[host] = nameEntry{ip: ip, until: now.Add(nameTTL)}
 	return ip, nil
 }
 

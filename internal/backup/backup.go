@@ -13,6 +13,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 
 	"crypto/sha256"
 	"golang.org/x/crypto/pbkdf2"
@@ -183,7 +184,16 @@ func encodePayload(d Data) ([]byte, error) {
 		out["activeId"] = d.ActiveID
 	}
 	if d.SplitShared != nil {
-		out["splitSharedMode"] = d.SplitShared.Mode
+		// Android читает splitSharedMode со своим списком приложений, а
+		// подсетей не знает. «Только указанные» с пустым списком у него
+		// значит «ничего в туннель», поэтому ему отдаём «весь трафик», а
+		// настоящий режим кладём под свой ключ.
+		androidMode := d.SplitShared.Mode
+		if androidMode == "include" {
+			androidMode = "all"
+		}
+		out["splitSharedMode"] = androidMode
+		out["splitSharedSubnetMode"] = d.SplitShared.Mode
 		out["splitSharedSubnets"] = d.SplitShared.Subnets
 	}
 	for key, def := range toggleDefaults {
@@ -211,11 +221,7 @@ func decodePayload(payload []byte) (Data, error) {
 	}
 	_ = json.Unmarshal(raw["activeId"], &d.ActiveID)
 
-	var sharedMode, sharedSubnets string
-	if json.Unmarshal(raw["splitSharedMode"], &sharedMode) == nil && sharedMode != "" {
-		_ = json.Unmarshal(raw["splitSharedSubnets"], &sharedSubnets)
-		d.SplitShared = &settings.SplitRules{Mode: sharedMode, Subnets: sharedSubnets}
-	}
+	d.SplitShared = decodeSplitShared(raw)
 
 	for key := range toggleDefaults {
 		var v bool
@@ -230,4 +236,26 @@ func decodePayload(payload []byte) (Data, error) {
 	}
 	d.Profiles = decodeServers(servers)
 	return d, nil
+}
+
+// decodeSplitShared достаёт общие правила раздельного туннелирования.
+// Свой режим (splitSharedSubnetMode) важнее андроидного: тот мог быть
+// огрублён при экспорте. Бэкап самого Android подсетей не несёт, а его
+// список приложений у нас не применить, поэтому «только указанные» без
+// подсетей превращается во «весь трафик» - иначе подключение упало бы
+// на пустом списке.
+func decodeSplitShared(raw map[string]json.RawMessage) *settings.SplitRules {
+	var mode, subnets string
+	_ = json.Unmarshal(raw["splitSharedSubnetMode"], &mode)
+	if mode == "" {
+		_ = json.Unmarshal(raw["splitSharedMode"], &mode)
+	}
+	if mode == "" {
+		return nil
+	}
+	_ = json.Unmarshal(raw["splitSharedSubnets"], &subnets)
+	if mode == "include" && strings.TrimSpace(subnets) == "" {
+		mode = "all"
+	}
+	return &settings.SplitRules{Mode: mode, Subnets: subnets}
 }

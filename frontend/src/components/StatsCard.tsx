@@ -12,10 +12,12 @@ export type PingState = {
   /** Когда получено последнее значение или отказ. */
   at: number | null;
   failed: boolean;
+  /** Проверочный узел вне туннеля из-за раздельного туннелирования. */
+  outside: boolean;
   measuring: boolean;
 };
 
-const idle: PingState = { ms: null, at: null, failed: false, measuring: false };
+const idle: PingState = { ms: null, at: null, failed: false, outside: false, measuring: false };
 
 /**
  * usePing меряет задержку через туннель раз в минуту, пока enabled.
@@ -24,31 +26,42 @@ const idle: PingState = { ms: null, at: null, failed: false, measuring: false };
 export function usePing(enabled: boolean): [PingState, () => void] {
   const [state, setState] = useState<PingState>(idle);
   const busy = useRef(false);
-  const live = useRef(enabled);
-  live.current = enabled;
+  // gen - номер сеанса замеров. Ответ, пришедший после отключения или
+  // уже в следующем подключении, относится к прошлому туннелю.
+  const gen = useRef(0);
 
   const measure = () => {
     const api = backend();
-    if (!api || busy.current || !live.current) return;
+    if (!api || busy.current || !enabled) return;
+    const mine = gen.current;
     busy.current = true;
     setState((s) => ({ ...s, measuring: true }));
     api
       .Ping()
       .then((r) => {
-        if (!live.current) return;
+        if (gen.current !== mine) return;
+        const at = Date.now();
         setState((s) =>
           r.ok
-            ? { ms: r.ms, at: Date.now(), failed: false, measuring: false }
-            : { ...s, at: Date.now(), failed: true, measuring: false },
+            ? { ms: r.ms, at, failed: false, outside: false, measuring: false }
+            : r.outside
+              ? { ms: null, at, failed: false, outside: true, measuring: false }
+              : { ...s, at, failed: true, outside: false, measuring: false },
         );
       })
-      .catch(() => setState((s) => ({ ...s, failed: true, measuring: false })))
+      .catch(() => {
+        if (gen.current === mine) setState((s) => ({ ...s, failed: true, measuring: false }));
+      })
       .finally(() => {
-        busy.current = false;
+        // Флаг снимает только свой сеанс: новый сеанс сбросил его сам и
+        // мог уже начать замер.
+        if (gen.current === mine) busy.current = false;
       });
   };
 
   useEffect(() => guard("StatsCard/ping", () => {
+    gen.current++;
+    busy.current = false;
     if (!enabled) {
       setState(idle);
       return;
@@ -64,6 +77,7 @@ export function usePing(enabled: boolean): [PingState, () => void] {
 
 /** Цвет точки: до 150 мс хорошо, до 400 терпимо, дальше плохо. */
 function pingDot(p: PingState): string {
+  if (p.outside) return "bg-zinc-400 dark:bg-zinc-600";
   if (p.failed || p.ms === null) return "bg-red-500";
   if (p.ms < 150) return "bg-emerald-500";
   if (p.ms < 400) return "bg-amber-500";
@@ -118,6 +132,11 @@ export function StatsCard({
       >
         {!vpn ? (
           <Two main={<span className="text-zinc-500 dark:text-zinc-400">—</span>} sub="только в режиме VPN" />
+        ) : ping.outside ? (
+          <Two
+            main={<span className="text-zinc-500 dark:text-zinc-400">—</span>}
+            sub="проверочный узел мимо туннеля"
+          />
         ) : ping.measuring && (ping.ms !== null || ping.at === null) ? (
           <Two
             main={<span className="text-zinc-500 dark:text-zinc-400">измеряю…</span>}
@@ -171,7 +190,7 @@ export function StatsStrip({ vpn, ping, traffic, startedAt }: {
 }) {
   return (
     <span className="flex shrink-0 items-center gap-3.5 text-xs tabular-nums text-zinc-500 dark:text-zinc-400">
-      {vpn && (ping.ms !== null || ping.failed) && (
+      {vpn && !ping.outside && (ping.ms !== null || ping.failed) && (
         <span className="flex items-center gap-1.5">
           <span className={`h-1.5 w-1.5 rounded-full ${pingDot(ping)}`} />
           {ping.failed ? "нет ответа" : `${ping.ms} мс`}

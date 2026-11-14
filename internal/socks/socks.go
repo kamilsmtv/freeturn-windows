@@ -72,6 +72,11 @@ var ErrAlreadyUp = errors.New("SOCKS5-сервер уже запущен")
 // errLoopback - попытка дотянуться через раздачу до самой этой машины.
 var errLoopback = errors.New("подключения к этому компьютеру через раздачу запрещены")
 
+// errIPv6 - назначение по IPv6. Туннель уводит только IPv4 (0.0.0.0/0),
+// и такой запрос ушёл бы в сеть напрямую - мимо того, ради чего сосед
+// подключался к раздаче.
+var errIPv6 = errors.New("IPv6 через раздачу не ходит: туннель ведёт только IPv4")
+
 // errAuth - неверный логин или пароль. В отличие от прочего сора на
 // сокете об этом стоит сказать вслух: владелец ждёт подключения соседа.
 var errAuth = errors.New("неверный логин или пароль")
@@ -373,20 +378,33 @@ func (c *session) associate(conn net.Conn, o Options, declared string) {
 // разрешённым, поэтому имя, указывающее на localhost, тоже не пройдёт.
 func dialer(o Options) *net.Dialer {
 	d := &net.Dialer{Timeout: dialTimeout}
-	if o.allowLoopback {
-		return d
-	}
 	d.Control = func(_, address string, _ syscall.RawConn) error {
 		// Адрес сюда приходит от резолвера системы и разбирается всегда;
 		// неразобранный пропускаем - придумывать политику для того, чего
-		// не бывает, вреднее, чем довериться системе.
-		ap, err := netip.ParseAddrPort(address)
-		if err == nil && (ap.Addr().IsLoopback() || ap.Addr().IsUnspecified()) {
-			return errLoopback
+		// не бывает, вреднее, чем довериться системе. Для имени с
+		// IPv6-адресом отказ не страшен: Dialer перейдёт к IPv4.
+		ap, perr := netip.ParseAddrPort(address)
+		if perr != nil {
+			return nil //nolint:nilerr // неразобранный адрес решает система, см. выше
 		}
-		return nil
+		return checkTarget(o, ap.Addr())
 	}
 	return d
+}
+
+// checkTarget - общая для TCP и UDP политика назначений.
+func checkTarget(o Options, ip netip.Addr) error {
+	ip = ip.Unmap()
+	if o.allowLoopback {
+		return nil
+	}
+	if ip.IsLoopback() || ip.IsUnspecified() {
+		return errLoopback
+	}
+	if !ip.Is4() {
+		return errIPv6
+	}
+	return nil
 }
 
 // logHandshake пишет в журнал только то, что владельцу полезно.
@@ -450,7 +468,7 @@ func peerOf(conn net.Conn) string {
 func replyCodeFor(err error) byte {
 	var ne net.Error
 	switch {
-	case errors.Is(err, errLoopback):
+	case errors.Is(err, errLoopback), errors.Is(err, errIPv6):
 		return replyNotAllowed
 	case isRefused(err):
 		return replyRefused

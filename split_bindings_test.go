@@ -1,6 +1,7 @@
 package main
 
 import (
+	"net/netip"
 	"testing"
 
 	"github.com/kamilsmtv/freeturn-windows/internal/profile"
@@ -22,5 +23,18 @@ func TestSplitFor(t *testing.T) {
 	}
 	if m, s := splitFor(p, nil); m != "include" || s != "10.0.0.0/8" {
 		t.Errorf("без набора должны остаться свои правила: %s %s", m, s)
+	}
+}
+
+func TestRoutedIntoTunnel(t *testing.T) {
+	routes := []netip.Prefix{netip.MustParsePrefix("10.0.0.0/8")}
+	if !routedIntoTunnel(&routes, netip.MustParseAddr("10.1.2.3")) {
+		t.Error("адрес внутри подсети туннеля признан внешним")
+	}
+	if routedIntoTunnel(&routes, netip.MustParseAddr("142.250.1.1")) {
+		t.Error("адрес вне подсетей туннеля признан туннельным")
+	}
+	if !routedIntoTunnel(nil, netip.MustParseAddr("142.250.1.1")) {
+		t.Error("без известных маршрутов замер не должен уходить в «мимо туннеля»")
 	}
 }

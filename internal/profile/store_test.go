@@ -111,6 +111,7 @@ func TestReplaceBySubKeepsManualProfilesAndUserFields(t *testing.T) {
 	fromSub.Client.ServerAddress = "1.2.3.4:56000"
 	fromSub.Client.VKLink = "https://vk.ru/call/join/mine"
 	fromSub.Client.ClientID = NewClientID()
+	fromSub.Client.SplitTunnelShared = true
 	fromSub.SubURL = "https://example.invalid/sub.md"
 	subSaved, _ := s.Save(fromSub)
 
@@ -141,6 +142,9 @@ func TestReplaceBySubKeepsManualProfilesAndUserFields(t *testing.T) {
 	}
 	if updated.Client.ClientID != fromSub.Client.ClientID {
 		t.Error("client-id должен пережить обновление подписки")
+	}
+	if !updated.Client.SplitTunnelShared {
+		t.Error("галочка общих правил туннелирования должна пережить обновление подписки")
 	}
 }
 

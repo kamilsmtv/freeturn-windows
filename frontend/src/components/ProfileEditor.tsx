@@ -38,10 +38,14 @@ export function ProfileEditor({
   const [sharedError, setSharedError] = useState("");
   const [wasShared] = useState(profile.client.splitTunnelShared);
   useEffect(() => {
-    api?.GetSplitShared().then((s) => {
-      setShared(s);
-      if (s.exists) setSharedDraft({ mode: s.mode, subnets: s.subnets });
-    });
+    api
+      ?.GetSplitShared()
+      .then((s) => {
+        setShared(s);
+        if (s.exists) setSharedDraft({ mode: s.mode, subnets: s.subnets });
+      })
+      // Без ответа считаем, что набора нет: иначе галочка не работала бы вовсе.
+      .catch(() => setShared({ exists: false, mode: "all", subnets: "", users: 0, total: 0 }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -63,6 +67,9 @@ export function ProfileEditor({
   // правил, выключение оставляет профилю копию общих - чтобы маршруты не
   // поменялись от одного щелчка.
   const toggleShared = (on: boolean) => {
+    // До ответа бэкенда неизвестно, есть ли набор: включение завело бы
+    // его из правил профиля поверх настоящего.
+    if (!shared) return;
     if (on) {
       if (!shared?.exists) {
         setSharedDraft({ mode: profile.client.splitTunnelMode, subnets: profile.client.splitTunnelSubnets });

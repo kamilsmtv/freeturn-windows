@@ -342,6 +342,7 @@ export type SplitShared = {
 export type PingResult = {
   ok: boolean;
   ms: number;
+  outside: boolean;
   error: string;
 };
 
